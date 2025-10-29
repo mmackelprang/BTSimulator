@@ -113,92 +113,25 @@ dotnet test --filter "FullyQualifiedName~EnvironmentVerifierTests"
 
 BTScanner is a command-line utility that scans for local Bluetooth devices and outputs their configuration details in a format ready for use in the `appsettings.json` file. This makes it easy to simulate any discovered device.
 
-### Building BTScanner
+For detailed documentation, examples, and troubleshooting, see the [BTScanner README](src/BTSimulator.Scanner/README.md).
+
+### Quick Start
 
 ```bash
-# Build the scanner utility
-dotnet build src/BTSimulator.Scanner/BTSimulator.Scanner.csproj
-
-# Or build the entire solution which includes the scanner
-dotnet build
-```
-
-### Running BTScanner
-
-```bash
-# Run with default settings (10 second scan, JSON output)
+# Build and run with default settings (10 second scan, JSON output)
 dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj
 
-# Specify scan duration (in seconds)
-dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 15
-
-# Specify output format (json or text)
-dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 text
-```
-
-### Usage Examples
-
-**Scan for 10 seconds and output JSON:**
-```bash
-dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj
-```
-
-**Scan for 20 seconds and output human-readable text:**
-```bash
+# Scan for 20 seconds with human-readable text output
 dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 20 text
 ```
 
-### Output Format
+### Features
 
-BTScanner discovers devices and extracts:
-- Device name and MAC address
-- RSSI (signal strength)
-- Advertised service UUIDs
-- GATT services and characteristics (if available)
-- Characteristic flags (read, write, notify, etc.)
-- Current characteristic values
-
-The JSON output can be directly copied into your `appsettings.json` file:
-
-```json
-[
-  {
-    "deviceName": "My BLE Device",
-    "deviceAddress": "AA:BB:CC:DD:EE:FF",
-    "rssi": -45,
-    "services": [
-      {
-        "uuid": "180F",
-        "isPrimary": true,
-        "characteristics": [
-          {
-            "uuid": "2A19",
-            "flags": ["read", "notify"],
-            "initialValue": "64",
-            "description": "Battery Level"
-          }
-        ]
-      }
-    ]
-  }
-]
-```
-
-### Requirements
-
-- BlueZ must be installed and running
-- Bluetooth adapter must be powered on
-- User must have appropriate permissions (bluetooth group)
-- Target Bluetooth devices must be in range and advertising
-
-### Troubleshooting
-
-If BTScanner fails to find devices:
-1. Ensure your Bluetooth adapter is powered on: `bluetoothctl power on`
-2. Verify Bluetooth is working: `bluetoothctl scan on`
-3. Check permissions: ensure you're in the `bluetooth` group
-4. Try increasing the scan duration for distant devices
-5. Make sure target devices are in pairing/advertising mode
+- Discovers all Bluetooth devices in range
+- Extracts device name, MAC address, GATT services, and characteristics
+- Identifies known Bluetooth services and characteristics by name
+- Outputs in JSON or text format, ready for `appsettings.json`
+- Handles authentication-required characteristics gracefully
 
 ## Project Structure
 
