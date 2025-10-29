@@ -109,6 +109,30 @@ dotnet test --verbosity normal
 dotnet test --filter "FullyQualifiedName~EnvironmentVerifierTests"
 ```
 
+## BTScanner Utility
+
+BTScanner is a command-line utility that scans for local Bluetooth devices and outputs their configuration details in a format ready for use in the `appsettings.json` file. This makes it easy to simulate any discovered device.
+
+For detailed documentation, examples, and troubleshooting, see the [BTScanner README](src/BTSimulator.Scanner/README.md).
+
+### Quick Start
+
+```bash
+# Build and run with default settings (10 second scan, JSON output)
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj
+
+# Scan for 20 seconds with human-readable text output
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 20 text
+```
+
+### Features
+
+- Discovers all Bluetooth devices in range
+- Extracts device name, MAC address, GATT services, and characteristics
+- Identifies known Bluetooth services and characteristics by name
+- Outputs in JSON or text format, ready for `appsettings.json`
+- Handles authentication-required characteristics gracefully
+
 ## Project Structure
 
 ```
@@ -125,6 +149,12 @@ BTSimulator/
 │   │   ├── Logging/               # File logger implementation
 │   │   ├── appsettings.json       # Application settings
 │   │   └── Program.cs             # Entry point
+│   ├── BTSimulator.Scanner/       # Bluetooth device scanner utility
+│   │   ├── DeviceScanner.cs       # Device discovery and GATT reading
+│   │   ├── BlueZDeviceInterfaces.cs  # BlueZ device D-Bus interfaces
+│   │   ├── KnownBluetoothServices.cs # Known BT service/characteristic names
+│   │   ├── ConsoleLogger.cs       # Console logger implementation
+│   │   └── Program.cs             # Scanner entry point
 │   └── BTSimulator.Tests/         # Unit and integration tests
 │       ├── Configuration/         # Configuration tests
 │       ├── Device/                # Device configuration tests
