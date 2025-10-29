@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Tmds.DBus;
+using BTSimulator.Core.Logging;
 
 namespace BTSimulator.Core.Gatt;
 
@@ -177,6 +178,7 @@ public class GattCharacteristic : IDisposable
     private readonly ObjectPath _objectPath;
     private byte[] _value;
     private bool _disposed;
+    private ILogger _logger = NullLogger.Instance;
 
     public GattCharacteristic(string uuid, string[] flags, byte[]? initialValue = null, int index = 0, int serviceIndex = 0)
     {
@@ -184,6 +186,14 @@ public class GattCharacteristic : IDisposable
         Flags = flags ?? throw new ArgumentNullException(nameof(flags));
         _value = initialValue ?? Array.Empty<byte>();
         _objectPath = new ObjectPath($"/com/btsimulator/service{serviceIndex:D4}/char{index:D4}");
+    }
+
+    /// <summary>
+    /// Sets the logger for this characteristic.
+    /// </summary>
+    public void SetLogger(ILogger logger)
+    {
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public string UUID { get; }
@@ -231,6 +241,8 @@ public class GattCharacteristic : IDisposable
     /// </summary>
     public async Task<byte[]> ReadValueAsync(Dictionary<string, object> options)
     {
+        _logger.Debug($"Reading characteristic {UUID}, value: {BitConverter.ToString(_value).Replace("-", "")}");
+        
         var args = new CharacteristicReadEventArgs { Value = _value };
         OnRead?.Invoke(this, args);
         
@@ -243,6 +255,8 @@ public class GattCharacteristic : IDisposable
     /// </summary>
     public async Task WriteValueAsync(byte[] value, Dictionary<string, object> options)
     {
+        _logger.Debug($"Writing characteristic {UUID}, value: {BitConverter.ToString(value).Replace("-", "")}");
+        
         var args = new CharacteristicWriteEventArgs { Value = value };
         OnWrite?.Invoke(this, args);
         

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Tmds.DBus;
+using BTSimulator.Core.Logging;
 
 namespace BTSimulator.Core.BlueZ;
 
@@ -19,6 +20,16 @@ public class BlueZManager : IDisposable
 {
     private IConnection? _connection;
     private bool _disposed;
+    private readonly ILogger _logger;
+
+    /// <summary>
+    /// Initializes a new instance of the BlueZManager.
+    /// </summary>
+    /// <param name="logger">Logger instance for logging operations. If null, NullLogger is used.</param>
+    public BlueZManager(ILogger? logger = null)
+    {
+        _logger = logger ?? NullLogger.Instance;
+    }
 
     /// <summary>
     /// Connects to the BlueZ service via D-Bus system bus.
@@ -28,12 +39,25 @@ public class BlueZManager : IDisposable
     {
         try
         {
+            _logger.Info("Connecting to BlueZ via D-Bus system bus");
             _connection = Connection.System;
             // Test connection by checking if BlueZ service is available
-            return await IsBlueZAvailableAsync();
+            bool isAvailable = await IsBlueZAvailableAsync();
+            
+            if (isAvailable)
+            {
+                _logger.Info("Successfully connected to BlueZ");
+            }
+            else
+            {
+                _logger.Warning("BlueZ service is not available");
+            }
+            
+            return isAvailable;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.Error("Failed to connect to BlueZ", ex);
             return false;
         }
     }
@@ -52,6 +76,7 @@ public class BlueZManager : IDisposable
 
         try
         {
+            _logger.Debug("Discovering Bluetooth adapters");
             // Use ObjectManager to discover all BlueZ objects
             var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
             var objects = await objectManager.GetManagedObjectsAsync();
@@ -62,11 +87,15 @@ public class BlueZManager : IDisposable
                 if (obj.Value.ContainsKey(BlueZConstants.Adapter1Interface))
                 {
                     adapters.Add(obj.Key.ToString());
+                    _logger.Debug($"Found adapter: {obj.Key}");
                 }
             }
+            
+            _logger.Info($"Discovered {adapters.Count} adapter(s)");
         }
         catch (Exception ex)
         {
+            _logger.Error("Failed to discover adapters", ex);
             throw new BlueZException("Failed to discover adapters", ex);
         }
 
@@ -93,7 +122,8 @@ public class BlueZManager : IDisposable
         if (_connection == null)
             throw new InvalidOperationException("Not connected to D-Bus. Call ConnectAsync first.");
 
-        return new BlueZAdapter(_connection, adapterPath);
+        _logger.Debug($"Creating adapter proxy for {adapterPath}");
+        return new BlueZAdapter(_connection, adapterPath, _logger);
     }
 
     /// <summary>
@@ -136,12 +166,14 @@ public class BlueZAdapter
     private readonly IConnection _connection;
     private readonly string _adapterPath;
     private readonly IAdapter1 _adapter;
+    private readonly ILogger _logger;
 
-    internal BlueZAdapter(IConnection connection, string adapterPath)
+    internal BlueZAdapter(IConnection connection, string adapterPath, ILogger logger)
     {
         _connection = connection;
         _adapterPath = adapterPath;
         _adapter = connection.CreateProxy<IAdapter1>(BlueZConstants.Service, adapterPath);
+        _logger = logger;
     }
 
     /// <summary>
