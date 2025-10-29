@@ -40,7 +40,6 @@ sleep 1
 
 echo "Step 2: Connecting to device..."
 bluetoothctl connect "$DEVICE_MAC" &
-CONNECT_PID=$!
 
 # Wait for connection with timeout
 TIMEOUT=15
@@ -89,8 +88,6 @@ EOF
 echo ""
 echo "Step 6: Disconnecting..."
 bluetoothctl disconnect "$DEVICE_MAC"
-
-wait $CONNECT_PID 2>/dev/null || true
 
 echo ""
 echo "=========================================="

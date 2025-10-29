@@ -1,26 +1,29 @@
 #!/bin/bash
 # BLE Read/Write Test Script
 # Tests reading and writing to GATT characteristics
-# Usage: ./test-read-write.sh <device_mac> <characteristic_uuid> [value_to_write]
+# Usage: ./test-read-write.sh <device_mac> <characteristic_handle> [value_to_write]
 
 set -e
 
 if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Usage: $0 <device_mac> <characteristic_uuid> [value_to_write]"
-    echo "Example (read):  $0 AA:BB:CC:DD:EE:FF 0x2a00"
-    echo "Example (write): $0 AA:BB:CC:DD:EE:FF 0x2a00 \"0x48656c6c6f\""
+    echo "Usage: $0 <device_mac> <characteristic_handle> [value_to_write]"
+    echo "Example (read):  $0 AA:BB:CC:DD:EE:FF 0x0010"
+    echo "Example (write): $0 AA:BB:CC:DD:EE:FF 0x0010 \"48656c6c6f\""
+    echo ""
+    echo "Note: Use handle values (e.g., 0x0010), not UUIDs"
+    echo "      To find handles, use: gatttool -b <MAC> --characteristics"
     exit 1
 fi
 
 DEVICE_MAC=$1
-CHAR_UUID=$2
+CHAR_HANDLE=$2
 WRITE_VALUE=$3
 
 echo "=========================================="
 echo "BLE Read/Write Test"
 echo "=========================================="
 echo "Device: $DEVICE_MAC"
-echo "Characteristic: $CHAR_UUID"
+echo "Characteristic Handle: $CHAR_HANDLE"
 if [ -n "$WRITE_VALUE" ]; then
     echo "Write value: $WRITE_VALUE"
 fi
@@ -38,7 +41,7 @@ echo "Step 1: Connecting to device..."
 if [ -n "$WRITE_VALUE" ]; then
     # Write test
     echo "Step 2: Writing value to characteristic..."
-    gatttool -b "$DEVICE_MAC" --char-write-req --handle="$CHAR_UUID" --value="$WRITE_VALUE"
+    gatttool -b "$DEVICE_MAC" --char-write-req --handle="$CHAR_HANDLE" --value="$WRITE_VALUE"
     
     if [ $? -eq 0 ]; then
         echo "✓ Write successful"
@@ -49,12 +52,12 @@ if [ -n "$WRITE_VALUE" ]; then
     
     echo ""
     echo "Step 3: Reading back value..."
-    READ_VALUE=$(gatttool -b "$DEVICE_MAC" --char-read --handle="$CHAR_UUID" 2>&1)
+    READ_VALUE=$(gatttool -b "$DEVICE_MAC" --char-read --handle="$CHAR_HANDLE" 2>&1)
     echo "Read value: $READ_VALUE"
 else
     # Read test only
     echo "Step 2: Reading characteristic value..."
-    READ_VALUE=$(gatttool -b "$DEVICE_MAC" --char-read --handle="$CHAR_UUID" 2>&1)
+    READ_VALUE=$(gatttool -b "$DEVICE_MAC" --char-read --handle="$CHAR_HANDLE" 2>&1)
     
     if [ $? -eq 0 ]; then
         echo "✓ Read successful"

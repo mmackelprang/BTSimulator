@@ -80,12 +80,14 @@ This directory contains helper scripts for testing and validating Bluetooth LE d
 
 **Examples**:
 ```bash
-# Read device name characteristic
-./test-read-write.sh AA:BB:CC:DD:EE:FF 0x2a00
+# Read device name characteristic (use handle, not UUID)
+./test-read-write.sh AA:BB:CC:DD:EE:FF 0x0010
 
-# Write to a characteristic
-./test-read-write.sh AA:BB:CC:DD:EE:FF 0x0010 0x48656c6c6f
+# Write to a characteristic (value in hex, no 0x prefix)
+./test-read-write.sh AA:BB:CC:DD:EE:FF 0x0010 48656c6c6f
 ```
+
+**Note**: This script requires handle values (e.g., `0x0010`), not UUIDs. Use `gatttool -b <MAC> --characteristics` to find handle values.
 
 **Requirements**: `gatttool` (install with `sudo apt-get install bluez-deprecated`)
 

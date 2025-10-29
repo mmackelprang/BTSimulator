@@ -55,7 +55,7 @@ expect "Connection successful" {
 }
 
 expect "Characteristic value was written successfully" {
-    puts "✓ Notifications enabled\n"
+    puts "✓ Notifications enabled (wrote 0x0100 to CCCD)\n"
     puts "Listening for notifications (press Ctrl+C to stop)...\n"
 }
 

@@ -29,13 +29,11 @@ fi
 echo "Starting BLE scan..."
 echo ""
 
-# Start scanning in background
-bluetoothctl << EOF &
+# Start scanning
+bluetoothctl << EOF
 power on
 scan on
 EOF
-
-SCAN_PID=$!
 
 # Wait for scan duration
 sleep "$SCAN_DURATION"
@@ -44,8 +42,6 @@ sleep "$SCAN_DURATION"
 bluetoothctl << EOF
 scan off
 EOF
-
-wait $SCAN_PID 2>/dev/null || true
 
 echo ""
 echo "Scan complete."
