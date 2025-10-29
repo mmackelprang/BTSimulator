@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using BTSimulator.Core.Environment;
 using BTSimulator.Core.Device;
 using BTSimulator.Core.BlueZ;
+using BTSimulator.Demo.Configuration;
+using BTSimulator.Demo.Logging;
 
 namespace BTSimulator.Demo;
 
@@ -19,6 +22,35 @@ class Program
         Console.WriteLine("   Bluetooth Device Simulator - Demo");
         Console.WriteLine("========================================");
         Console.WriteLine();
+
+        // Load configuration
+        Console.WriteLine("Loading configuration from appsettings.json...");
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .Build();
+
+        var settings = new AppSettings();
+        configuration.Bind(settings);
+        Console.WriteLine($"✓ Configuration loaded");
+        Console.WriteLine();
+
+        // Initialize logger
+        FileLogger? logger = null;
+        try
+        {
+            logger = new FileLogger(settings.Logging.LogDirectory);
+            logger.Info("BTSimulator Demo application started");
+            Console.WriteLine($"✓ Logger initialized (directory: {settings.Logging.LogDirectory})");
+            Console.WriteLine();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"✗ Failed to initialize logger: {ex.Message}");
+            Console.ResetColor();
+            return 1;
+        }
 
         // Step 1: Verify Environment
         Console.WriteLine("Step 1: Verifying Environment...");
@@ -52,9 +84,13 @@ class Program
         
         var config = new DeviceConfiguration
         {
-            DeviceName = "BT Simulator Demo",
-            // DeviceAddress = "AA:BB:CC:DD:EE:FF" // Uncomment to set custom MAC
+            DeviceName = settings.Bluetooth.DeviceName
         };
+
+        if (!string.IsNullOrEmpty(settings.Bluetooth.DeviceAddress))
+        {
+            config.DeviceAddress = settings.Bluetooth.DeviceAddress;
+        }
 
         Console.WriteLine($"Device Name: {config.DeviceName}");
         if (config.DeviceAddress != null)
@@ -67,65 +103,55 @@ class Program
         Console.WriteLine("Step 3: Adding GATT Services...");
         Console.WriteLine("─────────────────────────────────────");
 
-        // Add Battery Service (0x180F)
-        var batteryService = new GattServiceConfiguration
+        // Load services from configuration
+        foreach (var serviceSettings in settings.Bluetooth.Services)
         {
-            Uuid = "180F",  // Standard Battery Service UUID
-            IsPrimary = true
-        };
+            var service = new GattServiceConfiguration
+            {
+                Uuid = serviceSettings.Uuid,
+                IsPrimary = serviceSettings.IsPrimary
+            };
 
-        // Add Battery Level Characteristic (0x2A19)
-        var batteryLevel = new GattCharacteristicConfiguration
-        {
-            Uuid = "2A19",  // Standard Battery Level UUID
-            Flags = new List<string> { "read", "notify" },
-            InitialValue = new byte[] { 85 },  // 85% battery
-            Description = "Battery level in percentage"
-        };
+            foreach (var charSettings in serviceSettings.Characteristics)
+            {
+                // Convert hex string to byte array
+                byte[] initialValue = Array.Empty<byte>();
+                if (!string.IsNullOrEmpty(charSettings.InitialValue))
+                {
+                    try
+                    {
+                        initialValue = Convert.FromHexString(charSettings.InitialValue);
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"Warning: Invalid hex string for characteristic {charSettings.Uuid}");
+                    }
+                }
 
-        batteryService.AddCharacteristic(batteryLevel);
-        config.AddService(batteryService);
+                var characteristic = new GattCharacteristicConfiguration
+                {
+                    Uuid = charSettings.Uuid,
+                    Flags = charSettings.Flags,
+                    InitialValue = initialValue,
+                    Description = charSettings.Description
+                };
 
-        Console.WriteLine("✓ Added Battery Service (0x180F)");
-        Console.WriteLine($"  └─ Battery Level Characteristic (0x2A19)");
-        Console.WriteLine($"     - Flags: {string.Join(", ", batteryLevel.Flags)}");
-        Console.WriteLine($"     - Initial Value: {batteryLevel.InitialValue[0]}%");
-        Console.WriteLine();
+                service.AddCharacteristic(characteristic);
+            }
 
-        // Add Device Information Service (0x180A)
-        var deviceInfoService = new GattServiceConfiguration
-        {
-            Uuid = "180A",  // Standard Device Information Service UUID
-            IsPrimary = true
-        };
+            config.AddService(service);
+            Console.WriteLine($"✓ Added Service (0x{service.Uuid})");
+            foreach (var ch in service.Characteristics)
+            {
+                Console.WriteLine($"  └─ Characteristic (0x{ch.Uuid})");
+                Console.WriteLine($"     - Flags: {string.Join(", ", ch.Flags)}");
+                if (ch.InitialValue.Length > 0)
+                {
+                    Console.WriteLine($"     - Initial Value: {BitConverter.ToString(ch.InitialValue).Replace("-", "")}");
+                }
+            }
+        }
 
-        // Manufacturer Name
-        var manufacturerName = new GattCharacteristicConfiguration
-        {
-            Uuid = "2A29",  // Manufacturer Name String UUID
-            Flags = new List<string> { "read" },
-            InitialValue = System.Text.Encoding.UTF8.GetBytes("BTSimulator"),
-            Description = "Manufacturer name"
-        };
-
-        // Model Number
-        var modelNumber = new GattCharacteristicConfiguration
-        {
-            Uuid = "2A24",  // Model Number String UUID
-            Flags = new List<string> { "read" },
-            InitialValue = System.Text.Encoding.UTF8.GetBytes("Demo-v1.0"),
-            Description = "Model number"
-        };
-
-        deviceInfoService.AddCharacteristic(manufacturerName);
-        deviceInfoService.AddCharacteristic(modelNumber);
-        config.AddService(deviceInfoService);
-
-        Console.WriteLine("✓ Added Device Information Service (0x180A)");
-        Console.WriteLine("  ├─ Manufacturer Name Characteristic (0x2A29)");
-        Console.WriteLine($"     - Value: {System.Text.Encoding.UTF8.GetString(manufacturerName.InitialValue)}");
-        Console.WriteLine("  └─ Model Number Characteristic (0x2A24)");
-        Console.WriteLine($"     - Value: {System.Text.Encoding.UTF8.GetString(modelNumber.InitialValue)}");
         Console.WriteLine();
 
         // Step 4: Validate Configuration
@@ -137,6 +163,7 @@ class Program
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("✓ Configuration is valid!");
             Console.ResetColor();
+            logger.Info("Device configuration validated successfully");
             Console.WriteLine();
         }
         else
@@ -146,6 +173,7 @@ class Program
             foreach (var error in errors)
             {
                 Console.WriteLine($"  - {error}");
+                logger.Error($"Configuration error: {error}");
             }
             Console.ResetColor();
             Console.WriteLine();
@@ -175,7 +203,7 @@ class Program
         {
             try
             {
-                var manager = new BlueZManager();
+                var manager = new BlueZManager(logger);
                 var connected = await manager.ConnectAsync();
 
                 if (connected)
@@ -201,6 +229,7 @@ class Program
                         Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine($"  Note: {ex.Message}");
                         Console.ResetColor();
+                        logger.Warning($"Could not get default adapter: {ex.Message}");
                     }
                 }
                 else
@@ -217,6 +246,7 @@ class Program
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"✗ Error connecting to BlueZ: {ex.Message}");
                 Console.ResetColor();
+                logger.Error("Error connecting to BlueZ", ex);
                 Console.WriteLine();
             }
         }
@@ -242,6 +272,9 @@ class Program
 
         Console.WriteLine("For more information, see README.md");
         Console.WriteLine();
+
+        logger.Info("BTSimulator Demo application completed");
+        logger.Dispose();
 
         return 0;
     }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using BTSimulator.Core.BlueZ;
 using BTSimulator.Core.Device;
+using BTSimulator.Core.Logging;
 using Tmds.DBus;
 
 namespace BTSimulator.Core.Gatt;
@@ -13,14 +14,16 @@ namespace BTSimulator.Core.Gatt;
 public class GattApplicationManager : IDisposable
 {
     private readonly BlueZAdapter _adapter;
+    private readonly ILogger _logger;
     private GattApplication? _application;
     private LEAdvertisement? _advertisement;
     private bool _isRegistered;
     private bool _disposed;
 
-    public GattApplicationManager(BlueZAdapter adapter)
+    public GattApplicationManager(BlueZAdapter adapter, ILogger? logger = null)
     {
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -42,8 +45,11 @@ public class GattApplicationManager : IDisposable
         // Validate configuration
         if (!configuration.Validate(out var errors))
         {
+            _logger.Error($"Configuration validation failed: {string.Join(", ", errors)}");
             throw new InvalidOperationException($"Configuration is invalid: {string.Join(", ", errors)}");
         }
+
+        _logger.Info($"Registering GATT application with {configuration.Services.Count} service(s)");
 
         // Create GATT application
         _application = new GattApplication();
@@ -53,6 +59,7 @@ public class GattApplicationManager : IDisposable
         foreach (var serviceConfig in configuration.Services)
         {
             var service = new GattService(serviceConfig.Uuid, serviceConfig.IsPrimary, serviceIndex);
+            _logger.Debug($"Adding service {serviceConfig.Uuid}");
 
             // Add characteristics
             int charIndex = 0;
@@ -66,10 +73,14 @@ public class GattApplicationManager : IDisposable
                     serviceIndex
                 );
 
+                // Set logger for characteristic
+                characteristic.SetLogger(_logger);
+
                 // Set service path for characteristic
                 characteristic.ServicePath = service.ObjectPath;
 
                 service.AddCharacteristic(characteristic);
+                _logger.Debug($"Added characteristic {charConfig.Uuid} with initial value: {BitConverter.ToString(charConfig.InitialValue).Replace("-", "")}");
                 charIndex++;
             }
 
@@ -88,9 +99,11 @@ public class GattApplicationManager : IDisposable
             
             await Task.CompletedTask; // Placeholder for actual registration
             _isRegistered = true;
+            _logger.Info("GATT application registered successfully");
         }
         catch (Exception ex)
         {
+            _logger.Error("Failed to register GATT application with BlueZ", ex);
             throw new InvalidOperationException("Failed to register GATT application with BlueZ", ex);
         }
 

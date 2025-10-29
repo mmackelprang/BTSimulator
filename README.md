@@ -23,6 +23,16 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - GATT service and characteristic configuration
 - Validation framework for device configurations
 - Comprehensive unit tests
+- JSON-based configuration via appsettings.json
+
+✅ **Phase 3.5: Logging and Configuration**
+- ILogger interface in Core for dependency injection
+- Logging integrated into BlueZManager and GATT operations
+- Custom file logger with rotating daily logs
+- Log format: `[TimeStamp yyyyMMddHHmmss.fff][Log Level][ClassName.MethodName][Message][Exception]`
+- Debug-level logging for all message send/receive operations
+- Configuration file support (appsettings.json)
+- Comprehensive tests for logging and configuration
 
 ### In Progress
 
@@ -107,8 +117,19 @@ BTSimulator/
 │   ├── BTSimulator.Core/          # Core library
 │   │   ├── Environment/           # Environment verification
 │   │   ├── BlueZ/                 # BlueZ D-Bus integration
-│   │   └── Device/                # Device configuration
+│   │   ├── Device/                # Device configuration
+│   │   ├── Gatt/                  # GATT application management
+│   │   └── Logging/               # Logging interfaces
+│   ├── BTSimulator.Demo/          # Demo application
+│   │   ├── Configuration/         # Configuration classes
+│   │   ├── Logging/               # File logger implementation
+│   │   ├── appsettings.json       # Application settings
+│   │   └── Program.cs             # Entry point
 │   └── BTSimulator.Tests/         # Unit and integration tests
+│       ├── Configuration/         # Configuration tests
+│       ├── Device/                # Device configuration tests
+│       ├── Environment/           # Environment verification tests
+│       └── Logging/               # Logging tests
 ├── scripts/                       # Helper scripts
 │   ├── verify-environment.sh      # Environment verification
 │   └── setup-linux.sh             # Linux setup automation
@@ -169,10 +190,82 @@ if (!config.Validate(out var errors))
     return;
 }
 
-// Connect to BlueZ (Phase 2 - In Progress)
-var manager = new BlueZManager();
+// Connect to BlueZ with logging
+var logger = new FileLogger("logs");
+var manager = new BlueZManager(logger);
 await manager.ConnectAsync();
 // Additional implementation in progress...
+```
+
+## Configuration
+
+The Demo application supports configuration via `appsettings.json`:
+
+```json
+{
+  "Logging": {
+    "LogDirectory": "logs",
+    "MinLevel": "Debug"
+  },
+  "Bluetooth": {
+    "DeviceName": "BT Simulator Demo",
+    "DeviceAddress": null,
+    "Services": [
+      {
+        "Uuid": "180F",
+        "IsPrimary": true,
+        "Characteristics": [
+          {
+            "Uuid": "2A19",
+            "Flags": ["read", "notify"],
+            "InitialValue": "55",
+            "Description": "Battery level in percentage"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Configuration Options
+
+**Logging Settings:**
+- `LogDirectory`: Directory where log files will be stored (default: "logs")
+- `MinLevel`: Minimum log level - Debug, Info, Warning, or Error (default: "Info")
+
+**Bluetooth Settings:**
+- `DeviceName`: Name of the simulated Bluetooth device
+- `DeviceAddress`: Optional MAC address (format: XX:XX:XX:XX:XX:XX)
+- `Services`: Array of GATT services to advertise
+
+**GATT Service:**
+- `Uuid`: Service UUID (16-bit like "180F" or 128-bit format)
+- `IsPrimary`: Whether this is a primary service (default: true)
+- `Characteristics`: Array of characteristics in this service
+
+**GATT Characteristic:**
+- `Uuid`: Characteristic UUID
+- `Flags`: Array of flags (e.g., "read", "write", "notify", "indicate")
+- `InitialValue`: Hex string representing initial byte value (e.g., "55" for byte 0x55)
+- `Description`: Human-readable description
+
+### Logging
+
+The logger creates daily log files with automatic rotation:
+- **Format**: `[TimeStamp][Log Level][ClassName.MethodName][Message][Exception]`
+  - Timestamp format: `yyyyMMddHHmmss.fff` (e.g., `20251029181650.849`)
+  - Example: `[20251029181650.849][INFO][FileLogger.Info][Application started]`
+- **File naming**: `log_yyyyMMdd.txt` (e.g., `log_20251029.txt`)
+- **Rotation**: New file created each day
+- **Cleanup**: Only the 2 most recent log files are kept
+- **Debug logging**: All Bluetooth message send/receive operations are logged at debug level
+
+Example log output:
+```
+[20251029181650.849][INFO][FileLogger.Info][BTSimulator Demo application started]
+[20251029181650.903][INFO][FileLogger.Info][Device configuration validated successfully]
+[20251029181650.905][DEBUG][GattCharacteristic.ReadValueAsync][Reading characteristic 2A19, value: 55]
 ```
 
 ## Documentation
