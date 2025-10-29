@@ -86,8 +86,9 @@ public class DeviceScanner
     {
         try
         {
-            var deviceProxy = _connection.CreateProxy<IDevice1>(BlueZConstants.Service, devicePath);
-            var properties = await deviceProxy.GetAllAsync();
+            var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, devicePath);
+            var propertiesDict = await propertiesProxy.GetAllAsync("org.bluez.Device1");
+            var properties = Device1Properties.FromDictionary(propertiesDict);
 
             var device = new ScannedDevice
             {
@@ -111,13 +112,15 @@ public class DeviceScanner
                     if (!properties.Connected)
                     {
                         _logger.Debug($"Connecting to {device.Name ?? device.Address} to read services...");
+                        var deviceProxy = _connection.CreateProxy<IDevice1>(BlueZConstants.Service, devicePath);
                         await deviceProxy.ConnectAsync();
                         
                         // Wait for services to be resolved
                         for (int i = 0; i < 10; i++)
                         {
                             await Task.Delay(500);
-                            var updatedProps = await deviceProxy.GetAllAsync();
+                            var updatedPropertiesDict = await propertiesProxy.GetAllAsync("org.bluez.Device1");
+                            var updatedProps = Device1Properties.FromDictionary(updatedPropertiesDict);
                             if (updatedProps.ServicesResolved)
                             {
                                 device.Services = await ExtractGattServicesAsync(devicePath);
@@ -166,8 +169,9 @@ public class DeviceScanner
 
                 try
                 {
-                    var serviceProxy = _connection.CreateProxy<IGattService1>(BlueZConstants.Service, objPath);
-                    var serviceProps = await serviceProxy.GetAllAsync();
+                    var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, objPath);
+                    var servicePropsDict = await propertiesProxy.GetAllAsync("org.bluez.GattService1");
+                    var serviceProps = GattService1Properties.FromDictionary(servicePropsDict);
 
                     var service = new ScannedService
                     {
@@ -216,8 +220,9 @@ public class DeviceScanner
 
                 try
                 {
-                    var charProxy = _connection.CreateProxy<IGattCharacteristic1>(BlueZConstants.Service, objPath);
-                    var charProps = await charProxy.GetAllAsync();
+                    var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, objPath);
+                    var charPropsDict = await propertiesProxy.GetAllAsync("org.bluez.GattCharacteristic1");
+                    var charProps = GattCharacteristic1Properties.FromDictionary(charPropsDict);
 
                     var characteristic = new ScannedCharacteristic
                     {
@@ -230,6 +235,7 @@ public class DeviceScanner
                     {
                         try
                         {
+                            var charProxy = _connection.CreateProxy<IGattCharacteristic1>(BlueZConstants.Service, objPath);
                             characteristic.Value = await charProxy.ReadValueAsync(new Dictionary<string, object>());
                         }
                         catch

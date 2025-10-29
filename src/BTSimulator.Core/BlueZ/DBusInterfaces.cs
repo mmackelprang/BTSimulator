@@ -39,7 +39,6 @@ public interface IAdapter1 : IDBusObject
     Task SetDiscoveryFilterAsync(IDictionary<string, object> properties);
     
     Task<T> GetAsync<T>(string prop);
-    Task<Adapter1Properties> GetAllAsync();
     Task SetAsync(string prop, object val);
     Task<IDisposable> WatchPropertiesAsync(Action<PropertyChanges> handler);
 }
@@ -62,6 +61,43 @@ public class Adapter1Properties
     public bool Discovering { get; set; }
     public string[] UUIDs { get; set; } = Array.Empty<string>();
     public string Modalias { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Creates an Adapter1Properties instance from a D-Bus property dictionary.
+    /// </summary>
+    public static Adapter1Properties FromDictionary(IDictionary<string, object> properties)
+    {
+        var props = new Adapter1Properties();
+        
+        if (properties.TryGetValue("Address", out var address))
+            props.Address = address as string ?? string.Empty;
+        if (properties.TryGetValue("AddressType", out var addressType))
+            props.AddressType = addressType as string ?? string.Empty;
+        if (properties.TryGetValue("Name", out var name))
+            props.Name = name as string ?? string.Empty;
+        if (properties.TryGetValue("Alias", out var alias))
+            props.Alias = alias as string ?? string.Empty;
+        if (properties.TryGetValue("Class", out var classVal))
+            props.Class = Convert.ToUInt32(classVal);
+        if (properties.TryGetValue("Powered", out var powered))
+            props.Powered = Convert.ToBoolean(powered);
+        if (properties.TryGetValue("Discoverable", out var discoverable))
+            props.Discoverable = Convert.ToBoolean(discoverable);
+        if (properties.TryGetValue("Pairable", out var pairable))
+            props.Pairable = Convert.ToBoolean(pairable);
+        if (properties.TryGetValue("PairableTimeout", out var pairableTimeout))
+            props.PairableTimeout = Convert.ToUInt32(pairableTimeout);
+        if (properties.TryGetValue("DiscoverableTimeout", out var discoverableTimeout))
+            props.DiscoverableTimeout = Convert.ToUInt32(discoverableTimeout);
+        if (properties.TryGetValue("Discovering", out var discovering))
+            props.Discovering = Convert.ToBoolean(discovering);
+        if (properties.TryGetValue("UUIDs", out var uuids))
+            props.UUIDs = uuids as string[] ?? Array.Empty<string>();
+        if (properties.TryGetValue("Modalias", out var modalias))
+            props.Modalias = modalias as string ?? string.Empty;
+            
+        return props;
+    }
 }
 
 /// <summary>
