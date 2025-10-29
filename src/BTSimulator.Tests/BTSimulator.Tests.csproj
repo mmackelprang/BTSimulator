@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BTSimulator.Core\BTSimulator.Core.csproj" />
     <ProjectReference Include="..\BTSimulator.Demo\BTSimulator.Demo.csproj" />
+    <ProjectReference Include="..\BTSimulator.Scanner\BTSimulator.Scanner.csproj" />
   </ItemGroup>
 
 </Project>

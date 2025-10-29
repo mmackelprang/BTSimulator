@@ -183,7 +183,9 @@ public class BlueZAdapter
     {
         try
         {
-            return await _adapter.GetAllAsync();
+            var properties = _connection.CreateProxy<IProperties>(BlueZConstants.Service, _adapterPath);
+            var dict = await properties.GetAllAsync(BlueZConstants.Adapter1Interface);
+            return Adapter1Properties.FromDictionary(dict);
         }
         catch (Exception ex)
         {
