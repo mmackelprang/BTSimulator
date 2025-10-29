@@ -14,10 +14,6 @@ namespace BTSimulator.Core.BlueZ;
 /// - Requires BlueZ 5.x or later
 /// - Needs appropriate D-Bus permissions (system bus access)
 /// - WSL2 requires USB passthrough for Bluetooth adapter
-/// 
-/// Implementation Note:
-/// This is a foundational implementation that establishes the D-Bus connection framework.
-/// Full D-Bus message passing for BlueZ operations will be expanded in subsequent phases.
 /// </summary>
 public class BlueZManager : IDisposable
 {
@@ -33,9 +29,8 @@ public class BlueZManager : IDisposable
         try
         {
             _connection = Connection.System;
-            // Test connection by attempting a simple operation
-            await Task.CompletedTask; // Placeholder for actual connection test
-            return _connection != null;
+            // Test connection by checking if BlueZ service is available
+            return await IsBlueZAvailableAsync();
         }
         catch (Exception)
         {
@@ -57,14 +52,22 @@ public class BlueZManager : IDisposable
 
         try
         {
-            // Note: Full implementation requires ObjectManager D-Bus interface
-            // For now, return a default adapter path if BlueZ is available
-            // This is a placeholder for proper adapter discovery
-            await Task.CompletedTask;
+            // Use ObjectManager to discover all BlueZ objects
+            var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
+            var objects = await objectManager.GetManagedObjectsAsync();
+
+            // Filter objects that have Adapter1 interface
+            foreach (var obj in objects)
+            {
+                if (obj.Value.ContainsKey(BlueZConstants.Adapter1Interface))
+                {
+                    adapters.Add(obj.Key.ToString());
+                }
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Return empty list if discovery fails
+            throw new BlueZException("Failed to discover adapters", ex);
         }
 
         return adapters;
@@ -77,7 +80,7 @@ public class BlueZManager : IDisposable
     public async Task<string?> GetDefaultAdapterAsync()
     {
         var adapters = await GetAdaptersAsync();
-        return adapters.FirstOrDefault() ?? "/org/bluez/hci0"; // Default to hci0 if available
+        return adapters.FirstOrDefault();
     }
 
     /// <summary>
@@ -104,8 +107,9 @@ public class BlueZManager : IDisposable
 
         try
         {
-            // Placeholder for service availability check
-            await Task.CompletedTask;
+            // Try to call GetManagedObjects to verify BlueZ is available
+            var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
+            await objectManager.GetManagedObjectsAsync();
             return true;
         }
         catch
@@ -126,87 +130,230 @@ public class BlueZManager : IDisposable
 
 /// <summary>
 /// Represents a BlueZ Bluetooth adapter with methods for configuration and advertising.
-/// 
-/// Implementation Note:
-/// This class provides the interface for adapter operations.
-/// Full D-Bus property access and method calls will be implemented in subsequent phases.
 /// </summary>
 public class BlueZAdapter
 {
     private readonly IConnection _connection;
     private readonly string _adapterPath;
+    private readonly IAdapter1 _adapter;
 
     internal BlueZAdapter(IConnection connection, string adapterPath)
     {
         _connection = connection;
         _adapterPath = adapterPath;
+        _adapter = connection.CreateProxy<IAdapter1>(BlueZConstants.Service, adapterPath);
     }
 
     /// <summary>
-    /// Gets a property from the adapter using D-Bus Properties interface.
+    /// Gets all properties from the adapter.
     /// </summary>
-    private Task<T> GetPropertyAsync<T>(string propertyName)
+    public async Task<Adapter1Properties> GetAllPropertiesAsync()
     {
-        // Placeholder: Full implementation requires D-Bus Properties.Get method call
-        throw new NotImplementedException($"D-Bus property access will be implemented in Phase 2. Property: {propertyName}");
-    }
-
-    /// <summary>
-    /// Sets a property on the adapter using D-Bus Properties interface.
-    /// </summary>
-    private Task SetPropertyAsync(string propertyName, object value)
-    {
-        // Placeholder: Full implementation requires D-Bus Properties.Set method call
-        throw new NotImplementedException($"D-Bus property access will be implemented in Phase 2. Property: {propertyName}");
+        try
+        {
+            return await _adapter.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get adapter properties", ex);
+        }
     }
 
     /// <summary>
     /// Gets the adapter's Bluetooth MAC address.
     /// </summary>
-    public Task<string> GetAddressAsync()
+    public async Task<string> GetAddressAsync()
     {
-        return GetPropertyAsync<string>("Address");
+        try
+        {
+            return await _adapter.GetAsync<string>("Address");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get adapter address", ex);
+        }
     }
 
     /// <summary>
     /// Gets the adapter's friendly name.
     /// </summary>
-    public Task<string> GetNameAsync()
+    public async Task<string> GetNameAsync()
     {
-        return GetPropertyAsync<string>("Name");
+        try
+        {
+            return await _adapter.GetAsync<string>("Name");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get adapter name", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the adapter's alias (advertised name).
+    /// </summary>
+    public async Task<string> GetAliasAsync()
+    {
+        try
+        {
+            return await _adapter.GetAsync<string>("Alias");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get adapter alias", ex);
+        }
     }
 
     /// <summary>
     /// Sets the adapter's alias (advertised name).
     /// Note: This affects the name that other devices see during scanning.
     /// </summary>
-    public Task SetAliasAsync(string alias)
+    public async Task SetAliasAsync(string alias)
     {
-        return SetPropertyAsync("Alias", alias);
+        try
+        {
+            await _adapter.SetAsync("Alias", alias);
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to set adapter alias", ex);
+        }
     }
 
     /// <summary>
     /// Gets the current power state of the adapter.
     /// </summary>
-    public Task<bool> GetPoweredAsync()
+    public async Task<bool> GetPoweredAsync()
     {
-        return GetPropertyAsync<bool>("Powered");
+        try
+        {
+            return await _adapter.GetAsync<bool>("Powered");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get powered state", ex);
+        }
     }
 
     /// <summary>
     /// Powers the adapter on or off.
     /// </summary>
-    public Task SetPoweredAsync(bool powered)
+    public async Task SetPoweredAsync(bool powered)
     {
-        return SetPropertyAsync("Powered", powered);
+        try
+        {
+            await _adapter.SetAsync("Powered", powered);
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to set powered state", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the adapter is discoverable by other devices.
+    /// </summary>
+    public async Task<bool> GetDiscoverableAsync()
+    {
+        try
+        {
+            return await _adapter.GetAsync<bool>("Discoverable");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get discoverable state", ex);
+        }
     }
 
     /// <summary>
     /// Sets whether the adapter is discoverable by other devices.
     /// </summary>
-    public Task SetDiscoverableAsync(bool discoverable)
+    public async Task SetDiscoverableAsync(bool discoverable)
     {
-        return SetPropertyAsync("Discoverable", discoverable);
+        try
+        {
+            await _adapter.SetAsync("Discoverable", discoverable);
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to set discoverable state", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether the adapter is currently discovering.
+    /// </summary>
+    public async Task<bool> GetDiscoveringAsync()
+    {
+        try
+        {
+            return await _adapter.GetAsync<bool>("Discovering");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get discovering state", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the list of UUIDs supported by this adapter.
+    /// </summary>
+    public async Task<string[]> GetUuidsAsync()
+    {
+        try
+        {
+            return await _adapter.GetAsync<string[]>("UUIDs");
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to get adapter UUIDs", ex);
+        }
+    }
+
+    /// <summary>
+    /// Starts device discovery.
+    /// </summary>
+    public async Task StartDiscoveryAsync()
+    {
+        try
+        {
+            await _adapter.StartDiscoveryAsync();
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to start discovery", ex);
+        }
+    }
+
+    /// <summary>
+    /// Stops device discovery.
+    /// </summary>
+    public async Task StopDiscoveryAsync()
+    {
+        try
+        {
+            await _adapter.StopDiscoveryAsync();
+        }
+        catch (Exception ex)
+        {
+            throw new BlueZException("Failed to stop discovery", ex);
+        }
+    }
+
+    /// <summary>
+    /// Gets the LEAdvertisingManager1 proxy for this adapter.
+    /// </summary>
+    public ILEAdvertisingManager1 GetAdvertisingManager()
+    {
+        return _connection.CreateProxy<ILEAdvertisingManager1>(BlueZConstants.Service, _adapterPath);
+    }
+
+    /// <summary>
+    /// Gets the GattManager1 proxy for this adapter.
+    /// </summary>
+    public IGattManager1 GetGattManager()
+    {
+        return _connection.CreateProxy<IGattManager1>(BlueZConstants.Service, _adapterPath);
     }
 
     public string AdapterPath => _adapterPath;
