@@ -17,7 +17,6 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - BlueZ API interface definitions and constants
 - Manager class for adapter discovery and management
 - API documentation with BlueZ references
-- Logging infrastructure integrated into Core
 
 ✅ **Phase 3: Device Configuration** (Foundation)
 - Device configuration classes for name and MAC address
@@ -27,8 +26,10 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - JSON-based configuration via appsettings.json
 
 ✅ **Phase 3.5: Logging and Configuration**
+- ILogger interface in Core for dependency injection
+- Logging integrated into BlueZManager and GATT operations
 - Custom file logger with rotating daily logs
-- Log format: [TimeStamp yyyyMMddHHmmss.fff][Log Level][ClassName.MethodName][Message][Exception]
+- Log format: `[TimeStamp yyyyMMddHHmmss.fff][Log Level][ClassName.MethodName][Message][Exception]`
 - Debug-level logging for all message send/receive operations
 - Configuration file support (appsettings.json)
 - Comprehensive tests for logging and configuration
@@ -252,7 +253,9 @@ The Demo application supports configuration via `appsettings.json`:
 ### Logging
 
 The logger creates daily log files with automatic rotation:
-- **Format**: `[TimeStamp yyyyMMddHHmmss.fff][Log Level][ClassName.MethodName][Message][Exception]`
+- **Format**: `[TimeStamp][Log Level][ClassName.MethodName][Message][Exception]`
+  - Timestamp format: `yyyyMMddHHmmss.fff` (e.g., `20251029181650.849`)
+  - Example: `[20251029181650.849][INFO][FileLogger.Info][Application started]`
 - **File naming**: `log_yyyyMMdd.txt` (e.g., `log_20251029.txt`)
 - **Rotation**: New file created each day
 - **Cleanup**: Only the 2 most recent log files are kept
