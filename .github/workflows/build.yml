@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     
     steps:
     - name: Checkout code
@@ -44,6 +51,8 @@ jobs:
 
   code-quality:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Checkout code
