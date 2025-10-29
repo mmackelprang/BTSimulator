@@ -7,7 +7,7 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 ### Completed Phases
 
 ✅ **Phase 1: Environment Setup**
-- C# (.NET 9.0) project structure with core library and tests
+- C# (.NET 8.0) project structure with core library and tests
 - Environment verification for Linux/WSL2, BlueZ, D-Bus, and permissions
 - Comprehensive test suite for environment detection
 - Linux setup documentation
@@ -57,7 +57,7 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - **Operating System**: Linux or WSL2 (Windows Subsystem for Linux 2)
 - **BlueZ**: Version 5.x or later
 - **D-Bus**: System bus access required
-- **.NET**: .NET 9.0 SDK or later
+- **.NET**: .NET 8.0 SDK or later
 
 ### WSL2-Specific Requirements
 - USB passthrough for Bluetooth adapter (Windows 11 or usbipd-win)
