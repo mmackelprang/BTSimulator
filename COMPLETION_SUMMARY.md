@@ -22,7 +22,7 @@ BTSimulator is a C# .NET 9.0 project for simulating Bluetooth LE peripheral devi
 - Implemented Properties.Get/Set for BlueZ interactions
 - Built BlueZManager and BlueZAdapter classes
 - Added comprehensive error handling and retry logic
-- **Full adapter property access**: Address, Name, Alias, Powered, Discoverable, Pairable, UUIDs
+- **Full adapter property access**: Address, Name, Alias, Powered, Discoverable
 - **Property modification**: SetAlias, SetPowered, SetDiscoverable
 - **Adapter operations**: StartDiscovery, StopDiscovery, RemoveDevice
 - **Result**: Complete D-Bus integration with all BlueZ interfaces and full property access
@@ -167,7 +167,8 @@ The following require a physical BLE adapter and BlueZ:
 ## Usage Example
 
 ```csharp
-// 1. Connect to BlueZ
+// 1. Connect to BlueZ with logging
+// Note: In production, use configuration-based approach (e.g., settings.Logging.LogDirectory)
 var logger = new FileLogger("logs");
 var manager = new BlueZManager(logger);
 await manager.ConnectAsync();
