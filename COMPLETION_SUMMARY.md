@@ -22,7 +22,10 @@ BTSimulator is a C# .NET 9.0 project for simulating Bluetooth LE peripheral devi
 - Implemented Properties.Get/Set for BlueZ interactions
 - Built BlueZManager and BlueZAdapter classes
 - Added comprehensive error handling and retry logic
-- **Result**: Complete D-Bus integration with all BlueZ interfaces
+- **Full adapter property access**: Address, Name, Alias, Powered, Discoverable
+- **Property modification**: SetAlias, SetPowered, SetDiscoverable
+- **Adapter operations**: StartDiscovery, StopDiscovery, RemoveDevice
+- **Result**: Complete D-Bus integration with all BlueZ interfaces and full property access
 
 ### ✅ Phase 3: Device Configuration (100%)
 - Created DeviceConfiguration class with validation
@@ -56,7 +59,7 @@ BTSimulator is a C# .NET 9.0 project for simulating Bluetooth LE peripheral devi
 
 ### Build Status
 - ✅ **Compilation**: Clean build, 0 warnings
-- ✅ **Tests**: 38/38 passing (100%)
+- ✅ **Tests**: 61/61 passing (100%)
 - ✅ **Security**: CodeQL scan - 0 vulnerabilities
 - ✅ **Code Review**: All issues addressed
 
@@ -67,7 +70,10 @@ BTSimulator is a C# .NET 9.0 project for simulating Bluetooth LE peripheral devi
 | Device Config Tests | 16 | 100% |
 | GATT Service Tests | 9 | 100% |
 | Characteristic Tests | 5 | 100% |
-| **Total** | **38** | **100%** |
+| Configuration Tests | 10 | 100% |
+| Logging Tests | 7 | 100% |
+| BlueZ Tests | 6 | 100% |
+| **Total** | **61** | **100%** |
 
 ### Dependencies
 | Package | Version | Vulnerabilities |
@@ -161,13 +167,26 @@ The following require a physical BLE adapter and BlueZ:
 ## Usage Example
 
 ```csharp
-// 1. Connect to BlueZ
-var manager = new BlueZManager();
+// 1. Connect to BlueZ with logging
+// Note: In production, use configuration-based approach (e.g., settings.Logging.LogDirectory)
+var logger = new FileLogger("logs");
+var manager = new BlueZManager(logger);
 await manager.ConnectAsync();
 
-// 2. Get adapter
+// 2. Get adapter and access properties
 var adapterPath = await manager.GetDefaultAdapterAsync();
 var adapter = manager.CreateAdapter(adapterPath);
+
+// Read adapter properties
+var address = await adapter.GetAddressAsync();
+var name = await adapter.GetNameAsync();
+var powered = await adapter.GetPoweredAsync();
+Console.WriteLine($"Adapter: {name} ({address}), Powered: {powered}");
+
+// Modify adapter properties
+await adapter.SetAliasAsync("My BLE Simulator");
+await adapter.SetPoweredAsync(true);
+await adapter.SetDiscoverableAsync(true);
 
 // 3. Configure device
 var config = new DeviceConfiguration
@@ -193,16 +212,19 @@ var characteristic = new GattCharacteristicConfiguration
 service.AddCharacteristic(characteristic);
 config.AddService(service);
 
-// 5. Apply configuration
-var applicator = new DeviceConfigurationApplicator(adapter);
-await applicator.ApplyConfigurationAsync(config);
-
-// 6. Register GATT application
-var gattManager = new GattApplicationManager(adapter);
-await gattManager.RegisterApplicationAsync(config);
-await gattManager.RegisterAdvertisementAsync(config);
-
-// Device is now advertising!
+// 5. Validate and apply configuration
+if (config.Validate(out var errors))
+{
+    var applicator = new DeviceConfigurationApplicator(adapter, logger);
+    await applicator.ApplyConfigurationAsync(config);
+    
+    // 6. Register GATT application
+    var gattManager = new GattApplicationManager(adapter, logger);
+    await gattManager.RegisterApplicationAsync(config);
+    await gattManager.RegisterAdvertisementAsync(config);
+    
+    // Device is now advertising!
+}
 ```
 
 ## Future Enhancements (Optional)

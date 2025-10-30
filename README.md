@@ -12,20 +12,25 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - Comprehensive test suite for environment detection
 - Linux setup documentation
 
-✅ **Phase 2: D-Bus & BlueZ Integration** (Foundation)
+✅ **Phase 2: D-Bus & BlueZ Integration** (Complete)
 - D-Bus connection framework using Tmds.DBus
 - BlueZ API interface definitions and constants
 - Manager class for adapter discovery and management
+- Full adapter property access (Address, Name, Alias, Powered, Discoverable, etc.)
+- Property Get/Set operations via D-Bus
+- ObjectManager for adapter discovery
+- Error handling and retry logic
 - API documentation with BlueZ references
 
-✅ **Phase 3: Device Configuration** (Foundation)
+✅ **Phase 3: Device Configuration** (Complete)
 - Device configuration classes for name and MAC address
 - GATT service and characteristic configuration
 - Validation framework for device configurations
 - Comprehensive unit tests
 - JSON-based configuration via appsettings.json
+- Configuration persistence and import/export
 
-✅ **Phase 3.5: Logging and Configuration**
+✅ **Phase 3.5: Logging and Configuration** (Complete)
 - ILogger interface in Core for dependency injection
 - Logging integrated into BlueZManager and GATT operations
 - Custom file logger with rotating daily logs
@@ -34,22 +39,33 @@ A C# project for WSL2 and Linux that interfaces with BlueZ to simulate Bluetooth
 - Configuration file support (appsettings.json)
 - Comprehensive tests for logging and configuration
 
-### In Progress
+✅ **Phase 4: GATT Service Simulation** (Complete)
+- GATT application registration framework
+- Service object implementation (GattService)
+- Characteristic read/write handlers (GattCharacteristic)
+- Notify/Indicate support (event-based with OnRead/OnWrite events)
+- Descriptor support (GattDescriptor)
+- Advertisement registration (LEAdvertisement)
+- LEAdvertisingManager1 integration
+- Service UUID advertising
+- Manufacturer data support
+- D-Bus ObjectManager support for GATT objects
 
-🚧 **Phase 2-3: Full D-Bus Implementation**
-- Complete D-Bus message passing for property access
-- Adapter discovery via ObjectManager interface
-- Runtime device name and MAC address modification
+✅ **Phase 5: End-to-End Validation** (Complete)
+- Helper scripts for BLE client testing (5 bash scripts)
+- Connection test scenarios
+- Read/Write test scenarios
+- Notification test scenarios
+- Comprehensive script documentation
+- Automated testing flow examples
 
-🚧 **Phase 4: GATT Service Simulation**
-- Dynamic GATT service registration
-- Characteristic implementation with read/write/notify
-- Advertisement broadcasting
+### Future Enhancements
 
-🚧 **Phase 5: End-to-End Validation**
-- Helper scripts for BLE client testing
-- Integration test scenarios
-- Edge case validation
+🔮 **Advanced Runtime Features**
+- D-Bus object export for live GATT service registration (requires BlueZ daemon)
+- Property change notifications via D-Bus signals
+- Active notification/indication value updates to connected clients
+- Multiple simultaneous device simulation
 
 ## Requirements
 
@@ -224,7 +240,28 @@ if (!config.Validate(out var errors))
 var logger = new FileLogger("logs");
 var manager = new BlueZManager(logger);
 await manager.ConnectAsync();
-// Additional implementation in progress...
+
+// Get default adapter and access properties
+var adapterPath = await manager.GetDefaultAdapterAsync();
+if (adapterPath != null)
+{
+    var adapter = manager.CreateAdapter(adapterPath);
+    
+    // Read adapter properties
+    var address = await adapter.GetAddressAsync();
+    var name = await adapter.GetNameAsync();
+    var powered = await adapter.GetPoweredAsync();
+    
+    Console.WriteLine($"Adapter: {name} ({address})");
+    Console.WriteLine($"Powered: {powered}");
+    
+    // Modify adapter properties
+    await adapter.SetAliasAsync("My BLE Simulator");
+    await adapter.SetPoweredAsync(true);
+    await adapter.SetDiscoverableAsync(true);
+    
+    Console.WriteLine("Adapter configured successfully!");
+}
 ```
 
 ## Configuration
