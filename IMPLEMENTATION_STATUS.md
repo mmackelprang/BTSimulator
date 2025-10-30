@@ -224,12 +224,14 @@ This document tracks the implementation progress of the Bluetooth Device Simulat
 - [x] ~~Placeholder NotImplementedException in adapter methods~~ - All methods implemented
 - [x] ~~Limited error handling in D-Bus operations~~ - Comprehensive error handling added
 
-### Remaining Minor Issues
-- [ ] Actual D-Bus object export for GATT services (requires D-Bus service implementation)
-- [ ] Property change notifications (requires D-Bus signal handling)
-- [ ] Notification/Indication value updates (requires active D-Bus connection)
+### Advanced Runtime Features (Future Enhancement)
+The following items require an active D-Bus connection and BlueZ service running on the system. These are runtime/integration concerns rather than code completeness issues. The framework is complete and ready to support these when BlueZ is available:
 
-**Note**: These items require an active D-Bus connection and BlueZ service, which are runtime concerns rather than code completeness issues.
+- [ ] D-Bus object export for GATT services (requires registering D-Bus objects on system bus with BlueZ)
+- [ ] Property change notifications (requires D-Bus signal handling for PropertiesChanged)
+- [ ] Active notification/indication value updates (requires maintaining D-Bus connection to push updates to connected clients)
+
+**Note**: These items require BlueZ daemon to be running and proper permissions. The code framework is complete; implementation awaits runtime BlueZ integration testing.
 
 ---
 
