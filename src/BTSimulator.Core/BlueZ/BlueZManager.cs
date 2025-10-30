@@ -183,9 +183,19 @@ public class BlueZAdapter
     {
         try
         {
-            var properties = _connection.CreateProxy<IProperties>(BlueZConstants.Service, _adapterPath);
-            var dict = await properties.GetAllAsync(BlueZConstants.Adapter1Interface);
-            return Adapter1Properties.FromDictionary(dict);
+            var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
+            var objects = await objectManager.GetManagedObjectsAsync();
+            if (objects.TryGetValue(new ObjectPath(_adapterPath), out var interfaces) &&
+                interfaces.TryGetValue(BlueZConstants.Adapter1Interface, out var dict))
+            {
+                return Adapter1Properties.FromDictionary(dict);
+            }
+
+            throw new BlueZException($"Adapter properties not found for {_adapterPath}");
+        }
+        catch (BlueZException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -265,7 +275,7 @@ public class BlueZAdapter
         }
         catch (Exception ex)
         {
-            throw new BlueZException("Failed to get powered state", ex);
+            throw new BlueZException("Failed to get powered state "+ ex.Message, ex);
         }
     }
 

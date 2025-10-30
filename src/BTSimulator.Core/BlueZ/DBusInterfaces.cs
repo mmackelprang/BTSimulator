@@ -5,18 +5,6 @@ using Tmds.DBus;
 namespace BTSimulator.Core.BlueZ;
 
 /// <summary>
-/// D-Bus Properties interface for getting and setting object properties.
-/// </summary>
-[DBusInterface("org.freedesktop.DBus.Properties")]
-public interface IProperties : IDBusObject
-{
-    Task<object> GetAsync(string @interface, string property);
-    Task<IDictionary<string, object>> GetAllAsync(string @interface);
-    Task SetAsync(string @interface, string property, object value);
-    Task<IDisposable> WatchPropertiesAsync(Action<PropertyChanges> handler);
-}
-
-/// <summary>
 /// D-Bus ObjectManager interface for enumerating objects.
 /// </summary>
 [DBusInterface("org.freedesktop.DBus.ObjectManager")]

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 using BTSimulator.Core.BlueZ;
@@ -16,6 +18,13 @@ public class DeviceScanner
     private readonly BlueZAdapter _adapter;
     private readonly ILogger _logger;
     private readonly Connection _connection;
+    private static readonly HashSet<string> SecureReadFlags = new(new[]
+    {
+        "encrypt-read",
+        "encrypt-authenticated-read",
+        "secure-read",
+        "authorize"
+    }, StringComparer.OrdinalIgnoreCase);
 
     public DeviceScanner(BlueZManager manager, BlueZAdapter adapter, ILogger logger)
     {
@@ -34,42 +43,35 @@ public class DeviceScanner
 
         try
         {
-            // Start discovery
             await _adapter.StartDiscoveryAsync();
-
-            // Scan for the specified duration
             await Task.Delay(durationSeconds * 1000);
-
-            // Stop discovery
             await _adapter.StopDiscoveryAsync();
 
-            // Get all discovered devices
             var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
             var objects = await objectManager.GetManagedObjectsAsync();
 
-            foreach (var obj in objects)
+            foreach (var entry in objects)
             {
-                var objPath = obj.Key.ToString();
-                
-                // Check if this is a device object under our adapter
-                if (!objPath.StartsWith(_adapter.AdapterPath + "/"))
+                var objectPath = entry.Key;
+                var objectPathString = objectPath.ToString();
+
+                if (!objectPathString.StartsWith(_adapter.AdapterPath + "/"))
                     continue;
 
-                // Check if object has Device1 interface
-                if (!obj.Value.ContainsKey("org.bluez.Device1"))
+                if (!entry.Value.TryGetValue("org.bluez.Device1", out var deviceProperties))
                     continue;
 
                 try
                 {
-                    var device = await ExtractDeviceInfoAsync(objPath);
+                    var device = await ExtractDeviceInfoAsync(objectPath, deviceProperties, objects, objectManager);
                     if (device != null)
                     {
-                        devices[objPath] = device;
+                        devices[objectPathString] = device;
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning($"Failed to extract device info for {objPath}: {ex.Message}");
+                    _logger.Warning($"Failed to extract device info for {objectPathString}: {ex.Message}");
                 }
             }
         }
@@ -82,60 +84,80 @@ public class DeviceScanner
         return devices.Values.ToList();
     }
 
-    private async Task<ScannedDevice?> ExtractDeviceInfoAsync(string devicePath)
+    private async Task<ScannedDevice?> ExtractDeviceInfoAsync(
+        ObjectPath devicePath,
+        IDictionary<string, object> deviceProperties,
+        IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> snapshot,
+        IObjectManager objectManager)
     {
+        var devicePathString = devicePath.ToString();
+
         try
         {
-            var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, devicePath);
-            var propertiesDict = await propertiesProxy.GetAllAsync("org.bluez.Device1");
-            var properties = Device1Properties.FromDictionary(propertiesDict);
+            var properties = Device1Properties.FromDictionary(deviceProperties);
 
             var device = new ScannedDevice
             {
-                Path = devicePath,
+                Path = devicePathString,
                 Address = properties.Address,
                 Name = properties.Name,
                 Rssi = properties.RSSI,
                 ServiceUuids = properties.UUIDs?.ToList() ?? new List<string>()
             };
 
-            // Try to connect to the device to read GATT services
             if (properties.ServicesResolved)
             {
-                device.Services = await ExtractGattServicesAsync(devicePath);
+                device.Services = await ExtractGattServicesAsync(devicePathString, snapshot);
+                return device;
             }
-            else
+
+            if (!ShouldAttemptGattResolution(properties))
             {
-                // Try to connect and resolve services
-                try
+                return device;
+            }
+
+            try
+            {
+                var deviceProxy = _connection.CreateProxy<IDevice1>(BlueZConstants.Service, devicePathString);
+                var connectedToDevice = false;
+
+                if (!properties.Connected)
                 {
-                    if (!properties.Connected)
+                    _logger.Debug($"Connecting to {device.Name ?? device.Address} to read services...");
+                    await deviceProxy.ConnectAsync();
+                    connectedToDevice = true;
+
+                    for (int i = 0; i < 10; i++)
                     {
-                        _logger.Debug($"Connecting to {device.Name ?? device.Address} to read services...");
-                        var deviceProxy = _connection.CreateProxy<IDevice1>(BlueZConstants.Service, devicePath);
-                        await deviceProxy.ConnectAsync();
-                        
-                        // Wait for services to be resolved
-                        for (int i = 0; i < 10; i++)
+                        await Task.Delay(500);
+                        var updatedObjects = await objectManager.GetManagedObjectsAsync();
+                        if (TryGetDeviceProperties(updatedObjects, devicePath, out var updatedPropsDict))
                         {
-                            await Task.Delay(500);
-                            var updatedPropertiesDict = await propertiesProxy.GetAllAsync("org.bluez.Device1");
-                            var updatedProps = Device1Properties.FromDictionary(updatedPropertiesDict);
+                            var updatedProps = Device1Properties.FromDictionary(updatedPropsDict);
                             if (updatedProps.ServicesResolved)
                             {
-                                device.Services = await ExtractGattServicesAsync(devicePath);
+                                device.Services = await ExtractGattServicesAsync(devicePathString, updatedObjects);
                                 break;
                             }
                         }
-
-                        // Disconnect after reading
-                        await deviceProxy.DisconnectAsync();
                     }
                 }
-                catch (Exception ex)
+
+                if (connectedToDevice)
                 {
-                    _logger.Debug($"Could not connect to device {device.Name ?? device.Address}: {ex.Message}");
+                    try
+                    {
+                        await deviceProxy.DisconnectAsync();
+                    }
+                    catch (DBusException dbusEx) when (dbusEx.ErrorName == "org.bluez.Error.NotConnected")
+                    {
+                        // Device already disconnected; nothing to do.
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug($"Could not connect to device {device.Name ?? device.Address}: {ex.Message}");
             }
 
             return device;
@@ -147,118 +169,137 @@ public class DeviceScanner
         }
     }
 
-    private async Task<List<ScannedService>> ExtractGattServicesAsync(string devicePath)
+    private async Task<List<ScannedService>> ExtractGattServicesAsync(
+        string devicePath,
+        IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> objectsSnapshot)
     {
         var services = new List<ScannedService>();
 
-        try
+        foreach (var entry in objectsSnapshot)
         {
-            var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
-            var objects = await objectManager.GetManagedObjectsAsync();
+            var objectPathString = entry.Key.ToString();
 
-            foreach (var obj in objects)
+            if (!objectPathString.StartsWith(devicePath + "/service"))
+                continue;
+
+            if (!entry.Value.TryGetValue("org.bluez.GattService1", out var serviceProperties))
+                continue;
+
+            try
             {
-                var objPath = obj.Key.ToString();
-
-                // Check if this is a service under the device
-                if (!objPath.StartsWith(devicePath + "/service"))
-                    continue;
-
-                if (!obj.Value.ContainsKey("org.bluez.GattService1"))
-                    continue;
-
-                try
+                var serviceProps = GattService1Properties.FromDictionary(serviceProperties);
+                var service = new ScannedService
                 {
-                    var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, objPath);
-                    var servicePropsDict = await propertiesProxy.GetAllAsync("org.bluez.GattService1");
-                    var serviceProps = GattService1Properties.FromDictionary(servicePropsDict);
+                    Uuid = serviceProps.UUID,
+                    IsPrimary = serviceProps.Primary
+                };
 
-                    var service = new ScannedService
-                    {
-                        Uuid = serviceProps.UUID,
-                        IsPrimary = serviceProps.Primary
-                    };
+                service.Characteristics = await ExtractGattCharacteristicsAsync(objectsSnapshot, objectPathString);
 
-                    // Extract characteristics
-                    service.Characteristics = await ExtractGattCharacteristicsAsync(objPath);
-
-                    services.Add(service);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug($"Failed to extract service {objPath}: {ex.Message}");
-                }
+                services.Add(service);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug($"Failed to extract GATT services: {ex.Message}");
+            catch (Exception ex)
+            {
+                _logger.Debug($"Failed to extract service {objectPathString}: {ex.Message}");
+            }
         }
 
         return services;
     }
 
-    private async Task<List<ScannedCharacteristic>> ExtractGattCharacteristicsAsync(string servicePath)
+    private async Task<List<ScannedCharacteristic>> ExtractGattCharacteristicsAsync(
+        IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> objectsSnapshot,
+        string servicePath)
     {
         var characteristics = new List<ScannedCharacteristic>();
 
-        try
+        foreach (var entry in objectsSnapshot)
         {
-            var objectManager = _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
-            var objects = await objectManager.GetManagedObjectsAsync();
+            var objectPathString = entry.Key.ToString();
 
-            foreach (var obj in objects)
+            if (!objectPathString.StartsWith(servicePath + "/char"))
+                continue;
+
+            if (!entry.Value.TryGetValue("org.bluez.GattCharacteristic1", out var characteristicProperties))
+                continue;
+
+            try
             {
-                var objPath = obj.Key.ToString();
+                var charProps = GattCharacteristic1Properties.FromDictionary(characteristicProperties);
 
-                // Check if this is a characteristic under the service
-                if (!objPath.StartsWith(servicePath + "/char"))
-                    continue;
-
-                if (!obj.Value.ContainsKey("org.bluez.GattCharacteristic1"))
-                    continue;
-
-                try
+                var characteristic = new ScannedCharacteristic
                 {
-                    var propertiesProxy = _connection.CreateProxy<IProperties>(BlueZConstants.Service, objPath);
-                    var charPropsDict = await propertiesProxy.GetAllAsync("org.bluez.GattCharacteristic1");
-                    var charProps = GattCharacteristic1Properties.FromDictionary(charPropsDict);
+                    Uuid = charProps.UUID,
+                    Flags = charProps.Flags?.ToList() ?? new List<string>()
+                };
 
-                    var characteristic = new ScannedCharacteristic
+                if (SupportsUnauthenticatedRead(characteristic.Flags))
+                {
+                    try
                     {
-                        Uuid = charProps.UUID,
-                        Flags = charProps.Flags?.ToList() ?? new List<string>()
-                    };
-
-                    // Try to read the value if the characteristic is readable
-                    if (characteristic.Flags.Contains("read"))
-                    {
-                        try
-                        {
-                            var charProxy = _connection.CreateProxy<IGattCharacteristic1>(BlueZConstants.Service, objPath);
-                            characteristic.Value = await charProxy.ReadValueAsync(new Dictionary<string, object>());
-                        }
-                        catch
-                        {
-                            // Some characteristics may not be readable without authentication
-                            characteristic.Value = null;
-                        }
+                        var charProxy = _connection.CreateProxy<IGattCharacteristic1>(BlueZConstants.Service, objectPathString);
+                        characteristic.Value = await charProxy.ReadValueAsync(new Dictionary<string, object>());
                     }
+                    catch
+                    {
+                        characteristic.Value = null;
+                    }
+                }
 
-                    characteristics.Add(characteristic);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug($"Failed to extract characteristic {objPath}: {ex.Message}");
-                }
+                characteristics.Add(characteristic);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug($"Failed to extract characteristics: {ex.Message}");
+            catch (Exception ex)
+            {
+                _logger.Debug($"Failed to extract characteristic {objectPathString}: {ex.Message}");
+            }
         }
 
         return characteristics;
+    }
+
+    private static bool TryGetDeviceProperties(
+        IDictionary<ObjectPath, IDictionary<string, IDictionary<string, object>>> objects,
+        ObjectPath devicePath,
+        [NotNullWhen(true)] out IDictionary<string, object>? properties)
+    {
+        if (objects.TryGetValue(devicePath, out var interfaces) &&
+            interfaces.TryGetValue("org.bluez.Device1", out properties))
+        {
+            return true;
+        }
+
+        properties = null;
+        return false;
+    }
+
+    private static bool ShouldAttemptGattResolution(Device1Properties properties)
+    {
+        if (properties.ServicesResolved)
+        {
+            return true;
+        }
+
+        if (properties.Connected)
+        {
+            return true;
+        }
+
+        if (!properties.Paired && !properties.Trusted)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool SupportsUnauthenticatedRead(IReadOnlyCollection<string> flags)
+    {
+        if (!flags.Contains("read"))
+        {
+            return false;
+        }
+
+        return !flags.Any(flag => SecureReadFlags.Contains(flag));
     }
 }
 
