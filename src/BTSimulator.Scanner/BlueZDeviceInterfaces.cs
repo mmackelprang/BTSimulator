@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Tmds.DBus;
+using BTSimulator.Core.BlueZ;
 
 namespace BTSimulator.Scanner;
 
@@ -16,10 +17,6 @@ public interface IDevice1 : IDBusObject
     Task DisconnectProfileAsync(string uuid);
     Task PairAsync();
     Task CancelPairingAsync();
-    
-    Task<T> GetAsync<T>(string prop);
-    Task SetAsync(string prop, object val);
-    Task<IDisposable> WatchPropertiesAsync(Action<PropertyChanges> handler);
 }
 
 /// <summary>
@@ -97,9 +94,6 @@ public class Device1Properties
 [DBusInterface("org.bluez.GattService1")]
 public interface IGattService1 : IDBusObject
 {
-    Task<T> GetAsync<T>(string prop);
-    Task SetAsync(string prop, object val);
-    Task<IDisposable> WatchPropertiesAsync(Action<PropertyChanges> handler);
 }
 
 /// <summary>
@@ -144,10 +138,6 @@ public interface IGattCharacteristic1 : IDBusObject
     Task<(ushort handle, ushort mtu)> AcquireNotifyAsync(IDictionary<string, object> options);
     Task StartNotifyAsync();
     Task StopNotifyAsync();
-    
-    Task<T> GetAsync<T>(string prop);
-    Task SetAsync(string prop, object val);
-    Task<IDisposable> WatchPropertiesAsync(Action<PropertyChanges> handler);
 }
 
 /// <summary>
