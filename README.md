@@ -125,6 +125,42 @@ dotnet test --verbosity normal
 dotnet test --filter "FullyQualifiedName~EnvironmentVerifierTests"
 ```
 
+### 4. Run the Demo Application
+
+```bash
+# Navigate to the Demo app directory
+cd src/BTSimulator.Demo
+
+# Run the demo
+dotnet run
+```
+
+The Demo application will:
+1. Load configuration from `appsettings.json`
+2. Verify the environment (Linux, BlueZ, D-Bus)
+3. Configure the simulated device with GATT services
+4. Connect to BlueZ and select a Bluetooth adapter
+5. Register the GATT application and start advertising
+6. Present an interactive menu for:
+   - Sending canned messages to notify characteristics
+   - Listing registered characteristics
+   - Viewing log locations
+   - Exiting the application
+
+**Interactive Menu:**
+```
+Interactive Menu:
+─────────────────────────────────────
+1. Send Canned Message
+2. List Characteristics
+3. View Logs
+4. Exit
+
+Enter choice:
+```
+
+**Note:** The Demo app requires BlueZ to be running and a Bluetooth adapter to be available. On WSL2, ensure USB passthrough is configured for your Bluetooth adapter.
+
 ## BTScanner Utility
 
 BTScanner is a command-line utility that scans for local Bluetooth devices and outputs their configuration details in a format ready for use in the `appsettings.json` file. This makes it easy to simulate any discovered device.
@@ -291,6 +327,18 @@ The Demo application supports configuration via `appsettings.json`:
           }
         ]
       }
+    ],
+    "CannedMessages": [
+      {
+        "Name": "Battery Low",
+        "CharacteristicUuid": "2A19",
+        "Data": "14"
+      },
+      {
+        "Name": "Battery Full",
+        "CharacteristicUuid": "2A19",
+        "Data": "64"
+      }
     ]
   }
 }
@@ -318,6 +366,32 @@ The Demo application supports configuration via `appsettings.json`:
 - `Flags`: Array of flags (e.g., "read", "write", "notify", "indicate")
 - `InitialValue`: Hex string representing initial byte value (e.g., "55" for byte 0x55)
 - `Description`: Human-readable description
+
+**Canned Messages:**
+- `CannedMessages`: Array of predefined messages that can be sent interactively during runtime
+- `Name`: Human-readable name for the message
+- `CharacteristicUuid`: UUID of the characteristic to send this message to (must be a notify characteristic)
+- `Data`: Message data as a hex string (e.g., "48656C6C6F" for "Hello")
+
+Example canned messages configuration:
+```json
+{
+  "Bluetooth": {
+    "CannedMessages": [
+      {
+        "Name": "Hello World",
+        "CharacteristicUuid": "0000ff14-0000-1000-8000-00805f9b34fb",
+        "Data": "48656C6C6F20576F726C64"
+      },
+      {
+        "Name": "Temperature Reading",
+        "CharacteristicUuid": "0000ff14-0000-1000-8000-00805f9b34fb",
+        "Data": "1A05"
+      }
+    ]
+  }
+}
+```
 
 ### Bluetooth Adapter Selection
 

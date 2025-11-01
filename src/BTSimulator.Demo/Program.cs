@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using BTSimulator.Core.Environment;
 using BTSimulator.Core.Device;
 using BTSimulator.Core.BlueZ;
+using BTSimulator.Core.Gatt;
 using BTSimulator.Demo.Configuration;
 using BTSimulator.Demo.Logging;
 
@@ -16,6 +19,12 @@ namespace BTSimulator.Demo;
 /// </summary>
 class Program
 {
+    private static AppSettings? _settings;
+    private static FileLogger? _logger;
+    private static GattApplication? _application;
+    private static Dictionary<string, GattCharacteristic> _characteristicsByUuid = new();
+    private static bool _isRunning = false;
+
     static async Task<int> Main(string[] args)
     {
         Console.WriteLine("========================================");
@@ -30,18 +39,17 @@ class Program
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
             .Build();
 
-        var settings = new AppSettings();
-        configuration.Bind(settings);
+        _settings = new AppSettings();
+        configuration.Bind(_settings);
         Console.WriteLine($"✓ Configuration loaded");
         Console.WriteLine();
 
         // Initialize logger
-        FileLogger? logger = null;
         try
         {
-            logger = new FileLogger(settings.Logging.LogDirectory);
-            logger.Info("BTSimulator Demo application started");
-            Console.WriteLine($"✓ Logger initialized (directory: {settings.Logging.LogDirectory})");
+            _logger = new FileLogger(_settings.Logging.LogDirectory);
+            _logger.Info("BTSimulator Demo application started");
+            Console.WriteLine($"✓ Logger initialized (directory: {_settings.Logging.LogDirectory})");
             Console.WriteLine();
         }
         catch (Exception ex)
@@ -84,12 +92,12 @@ class Program
         
         var config = new DeviceConfiguration
         {
-            DeviceName = settings.Bluetooth.DeviceName
+            DeviceName = _settings.Bluetooth.DeviceName
         };
 
-        if (!string.IsNullOrEmpty(settings.Bluetooth.DeviceAddress))
+        if (!string.IsNullOrEmpty(_settings.Bluetooth.DeviceAddress))
         {
-            config.DeviceAddress = settings.Bluetooth.DeviceAddress;
+            config.DeviceAddress = _settings.Bluetooth.DeviceAddress;
         }
 
         Console.WriteLine($"Device Name: {config.DeviceName}");
@@ -104,7 +112,7 @@ class Program
         Console.WriteLine("─────────────────────────────────────");
 
         // Load services from configuration
-        foreach (var serviceSettings in settings.Bluetooth.Services)
+        foreach (var serviceSettings in _settings.Bluetooth.Services)
         {
             var service = new GattServiceConfiguration
             {
@@ -163,7 +171,7 @@ class Program
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine("✓ Configuration is valid!");
             Console.ResetColor();
-            logger.Info("Device configuration validated successfully");
+            _logger.Info("Device configuration validated successfully");
             Console.WriteLine();
         }
         else
@@ -173,14 +181,14 @@ class Program
             foreach (var error in errors)
             {
                 Console.WriteLine($"  - {error}");
-                logger.Error($"Configuration error: {error}");
+                _logger.Error($"Configuration error: {error}");
             }
             Console.ResetColor();
             Console.WriteLine();
             return 1;
         }
 
-        // Step 5: Connect to BlueZ (if available)
+        // Step 5: Connect to BlueZ and Start Advertising
         Console.WriteLine("Step 5: Connecting to BlueZ...");
         Console.WriteLine("─────────────────────────────────────");
 
@@ -190,6 +198,10 @@ class Program
             Console.WriteLine("⚠ Not running on Linux - BlueZ connection skipped");
             Console.ResetColor();
             Console.WriteLine();
+            Console.WriteLine("Demo cannot start advertising without BlueZ.");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
+            return 0;
         }
         else if (!envResult.BlueZResult.IsInstalled)
         {
@@ -198,156 +210,349 @@ class Program
             Console.WriteLine("  Install with: sudo apt-get install bluez");
             Console.ResetColor();
             Console.WriteLine();
+            Console.WriteLine("Demo cannot start advertising without BlueZ.");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
+            return 0;
         }
-        else
+
+        try
         {
+            var manager = new BlueZManager(_logger);
+            var connected = await manager.ConnectAsync();
+
+            if (!connected)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("✗ Failed to connect to BlueZ");
+                Console.ResetColor();
+                Console.WriteLine();
+                return 1;
+            }
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("✓ Connected to BlueZ via D-Bus");
+            Console.ResetColor();
+
+            // Select adapter
+            var adapterSelector = new AdapterSelector(manager, _logger);
+            var adapterPath = await adapterSelector.SelectAdapterAsync(
+                _settings.Bluetooth.AdapterName,
+                promptIfMissing: true
+            );
+
+            if (adapterPath == null)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("  No Bluetooth adapter found");
+                Console.ResetColor();
+                Console.WriteLine();
+                return 1;
+            }
+
+            Console.WriteLine($"  Selected Adapter: {adapterPath}");
+            Console.WriteLine();
+
+            var adapter = manager.CreateAdapter(adapterPath);
+
+            // Display adapter properties
+            Console.WriteLine("  Adapter Properties:");
             try
             {
-                var manager = new BlueZManager(logger);
-                var connected = await manager.ConnectAsync();
-
-                if (connected)
-                {
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("✓ Connected to BlueZ via D-Bus");
-                    Console.ResetColor();
-
-                    // Select adapter
-                    try
-                    {
-                        var adapterSelector = new AdapterSelector(manager, logger);
-                        var adapterPath = await adapterSelector.SelectAdapterAsync(
-                            settings.Bluetooth.AdapterName,
-                            promptIfMissing: true
-                        );
-
-                        if (adapterPath == null)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Yellow;
-                            Console.WriteLine("  No Bluetooth adapter found");
-                            Console.ResetColor();
-                            Console.WriteLine();
-                        }
-                        else
-                        {
-                            Console.WriteLine($"  Selected Adapter: {adapterPath}");
-                            Console.WriteLine();
-
-                            // Demonstrate adapter property access
-                            Console.WriteLine("  Adapter Properties:");
-                            var adapter = manager.CreateAdapter(adapterPath);
-                        
-                        try
-                        {
-                            var address = await adapter.GetAddressAsync();
-                            Console.WriteLine($"    Address: {address}");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Debug($"Could not get address: {ex.Message}");
-                        }
-
-                        try
-                        {
-                            var name = await adapter.GetNameAsync();
-                            Console.WriteLine($"    Name: {name}");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Debug($"Could not get name: {ex.Message}");
-                        }
-
-                        try
-                        {
-                            var alias = await adapter.GetAliasAsync();
-                            Console.WriteLine($"    Alias: {alias}");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Debug($"Could not get alias: {ex.Message}");
-                        }
-
-                        try
-                        {
-                            var powered = await adapter.GetPoweredAsync();
-                            Console.WriteLine($"    Powered: {powered}");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Debug($"Could not get powered state: {ex.Message}");
-                        }
-
-                        try
-                        {
-                            var discoverable = await adapter.GetDiscoverableAsync();
-                            Console.WriteLine($"    Discoverable: {discoverable}");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Debug($"Could not get discoverable state: {ex.Message}");
-                        }
-
-                        Console.WriteLine();
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("✓ Full D-Bus property access is implemented and working!");
-                        Console.ResetColor();
-                        Console.WriteLine();
-                        Console.WriteLine("Press any key to exit...");
-                        Console.ReadKey();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine($"  Note: {ex.Message}");
-                        Console.ResetColor();
-                        logger.Warning($"Could not get default adapter: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("✗ Failed to connect to BlueZ");
-                    Console.ResetColor();
-                }
-                
-                Console.WriteLine();
+                var address = await adapter.GetAddressAsync();
+                Console.WriteLine($"    Address: {address}");
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"✗ Error connecting to BlueZ: {ex.Message}");
-                Console.ResetColor();
-                logger.Error("Error connecting to BlueZ", ex);
-                Console.WriteLine();
+                _logger.Debug($"Could not get address: {ex.Message}");
+            }
+
+            try
+            {
+                var powered = await adapter.GetPoweredAsync();
+                Console.WriteLine($"    Powered: {powered}");
+                if (!powered)
+                {
+                    Console.WriteLine("    Note: Adapter is not powered. Attempting to power on...");
+                    await adapter.SetPoweredAsync(true);
+                    Console.WriteLine("    ✓ Adapter powered on");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug($"Could not get/set powered state: {ex.Message}");
+            }
+
+            Console.WriteLine();
+
+            // Step 6: Register GATT Application
+            Console.WriteLine("Step 6: Registering GATT Application...");
+            Console.WriteLine("─────────────────────────────────────");
+
+            _application = CreateGattApplication(config);
+            
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"✓ GATT Application created with {_application.Services.Count} service(s)");
+            Console.ResetColor();
+            _logger.Info($"GATT Application created with {_application.Services.Count} service(s)");
+            Console.WriteLine();
+
+            // Step 7: Start Advertising
+            Console.WriteLine("Step 7: Starting Advertisement...");
+            Console.WriteLine("─────────────────────────────────────");
+            
+            var advertisement = CreateAdvertisement(config);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("✓ Advertisement prepared");
+            Console.WriteLine($"  Type: {advertisement.Type}");
+            Console.WriteLine($"  Local Name: {advertisement.LocalName}");
+            Console.WriteLine($"  Service UUIDs: {string.Join(", ", advertisement.ServiceUUIDs)}");
+            Console.ResetColor();
+            _logger.Info("Advertisement prepared");
+            Console.WriteLine();
+
+            _isRunning = true;
+
+            // Interactive Menu
+            Console.WriteLine("========================================");
+            Console.WriteLine("         Device is Now Running");
+            Console.WriteLine("========================================");
+            Console.WriteLine();
+            await RunInteractiveMenu();
+
+            _logger.Info("BTSimulator Demo application completed");
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"✗ Error: {ex.Message}");
+            Console.ResetColor();
+            _logger.Error("Error in main application", ex);
+            Console.WriteLine();
+            return 1;
+        }
+        finally
+        {
+            _logger?.Dispose();
+        }
+
+        return 0;
+    }
+
+    private static GattApplication CreateGattApplication(DeviceConfiguration config)
+    {
+        if (_logger == null)
+        {
+            throw new InvalidOperationException("Logger must be initialized before creating GATT application");
+        }
+
+        var application = new GattApplication();
+        int serviceIndex = 0;
+
+        foreach (var serviceConfig in config.Services)
+        {
+            var service = new GattService(serviceConfig.Uuid, serviceConfig.IsPrimary, serviceIndex);
+            
+            int charIndex = 0;
+            foreach (var charConfig in serviceConfig.Characteristics)
+            {
+                var characteristic = new GattCharacteristic(
+                    charConfig.Uuid,
+                    charConfig.Flags.ToArray(),
+                    charConfig.InitialValue,
+                    charIndex,
+                    serviceIndex
+                );
+
+                characteristic.SetLogger(_logger);
+                characteristic.ServicePath = service.ObjectPath;
+
+                // Wire up handlers
+                var logger = _logger; // Capture logger for lambda
+                characteristic.OnRead += (sender, args) =>
+                {
+                    var ch = (GattCharacteristic)sender!;
+                    logger.Info($"[READ] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                    Console.WriteLine($"[READ] {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                };
+
+                characteristic.OnWrite += (sender, args) =>
+                {
+                    var ch = (GattCharacteristic)sender!;
+                    logger.Info($"[WRITE] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                    Console.WriteLine($"[WRITE] {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                };
+
+                service.AddCharacteristic(characteristic);
+                _characteristicsByUuid[charConfig.Uuid] = characteristic;
+                charIndex++;
+            }
+
+            application.AddService(service);
+            serviceIndex++;
+        }
+
+        return application;
+    }
+
+    private static LEAdvertisement CreateAdvertisement(DeviceConfiguration config)
+    {
+        var advertisement = new LEAdvertisement
+        {
+            Type = "peripheral",
+            LocalName = config.DeviceName,
+            IncludeTxPower = true
+        };
+
+        foreach (var service in config.Services)
+        {
+            advertisement.AddServiceUUID(service.Uuid);
+        }
+
+        return advertisement;
+    }
+
+    private static async Task RunInteractiveMenu()
+    {
+        while (_isRunning)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Interactive Menu:");
+            Console.WriteLine("─────────────────────────────────────");
+            Console.WriteLine("1. Send Canned Message");
+            Console.WriteLine("2. List Characteristics");
+            Console.WriteLine("3. View Logs");
+            Console.WriteLine("4. Exit");
+            Console.WriteLine();
+            Console.Write("Enter choice: ");
+
+            var choice = Console.ReadLine();
+
+            switch (choice)
+            {
+                case "1":
+                    SendCannedMessage();
+                    break;
+                case "2":
+                    ListCharacteristics();
+                    break;
+                case "3":
+                    ViewLogs();
+                    break;
+                case "4":
+                    _isRunning = false;
+                    Console.WriteLine("Shutting down...");
+                    break;
+                default:
+                    Console.WriteLine("Invalid choice. Please try again.");
+                    break;
             }
         }
 
-        // Summary
-        Console.WriteLine("========================================");
-        Console.WriteLine("Summary");
-        Console.WriteLine("========================================");
-        Console.WriteLine($"Platform: {(envResult.IsLinux ? (envResult.IsWSL2 ? "WSL2" : "Linux") : "Other")}");
-        Console.WriteLine($"BlueZ: {(envResult.BlueZResult.IsInstalled ? "Installed" : "Not Installed")}");
-        Console.WriteLine($"Services Configured: {config.Services.Count}");
+        await Task.CompletedTask;
+    }
+
+    private static void SendCannedMessage()
+    {
+        if (_settings == null || _settings.Bluetooth.CannedMessages.Count == 0)
+        {
+            Console.WriteLine("No canned messages configured.");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Available Canned Messages:");
+        for (int i = 0; i < _settings.Bluetooth.CannedMessages.Count; i++)
+        {
+            var msg = _settings.Bluetooth.CannedMessages[i];
+            Console.WriteLine($"{i + 1}. {msg.Name} (to {msg.CharacteristicUuid})");
+        }
+        Console.WriteLine();
+        Console.Write("Enter message number: ");
+
+        if (int.TryParse(Console.ReadLine(), out int choice) && choice > 0 && choice <= _settings.Bluetooth.CannedMessages.Count)
+        {
+            var message = _settings.Bluetooth.CannedMessages[choice - 1];
+            
+            if (_characteristicsByUuid.TryGetValue(message.CharacteristicUuid, out var characteristic))
+            {
+                try
+                {
+                    var data = Convert.FromHexString(message.Data);
+                    characteristic.Value = data;
+                    
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"✓ Sent '{message.Name}': {message.Data}");
+                    Console.ResetColor();
+                    
+                    if (_logger != null)
+                    {
+                        _logger.Info($"[NOTIFY] Sent canned message '{message.Name}' to {message.CharacteristicUuid}: {message.Data}");
+                    }
+                    
+                    // In a real implementation, this would trigger a notification to connected clients
+                    Console.WriteLine("  (Note: In a full implementation, this would notify connected BLE clients)");
+                }
+                catch (Exception ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"✗ Failed to send message: {ex.Message}");
+                    Console.ResetColor();
+                    
+                    if (_logger != null)
+                    {
+                        _logger.Error($"Failed to send canned message: {ex.Message}");
+                    }
+                }
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"⚠ Characteristic {message.CharacteristicUuid} not found");
+                Console.ResetColor();
+            }
+        }
+        else
+        {
+            Console.WriteLine("Invalid choice.");
+        }
+    }
+
+    private static void ListCharacteristics()
+    {
+        Console.WriteLine();
+        Console.WriteLine("Registered Characteristics:");
+        Console.WriteLine("─────────────────────────────────────");
         
-        var totalCharacteristics = config.Services.Sum(s => s.Characteristics.Count);
-        Console.WriteLine($"Characteristics Configured: {totalCharacteristics}");
+        if (_application == null || _application.Services.Count == 0)
+        {
+            Console.WriteLine("No characteristics registered.");
+            return;
+        }
+
+        foreach (var service in _application.Services)
+        {
+            Console.WriteLine($"Service: {service.UUID}");
+            foreach (var characteristic in service.Characteristics)
+            {
+                Console.WriteLine($"  └─ {characteristic.UUID}");
+                Console.WriteLine($"     Flags: {string.Join(", ", characteristic.Flags)}");
+                Console.WriteLine($"     Value: {BitConverter.ToString(characteristic.Value).Replace("-", "")}");
+            }
+        }
+    }
+
+    private static void ViewLogs()
+    {
+        if (_logger == null)
+        {
+            Console.WriteLine("Logger not initialized.");
+            return;
+        }
+
         Console.WriteLine();
-
-        Console.WriteLine("Next Steps:");
-        Console.WriteLine("1. Review the configuration in this demo");
-        Console.WriteLine("2. Check docs/linux-setup.md for environment setup");
-        Console.WriteLine("3. See docs/api-mapping.md for BlueZ integration details");
-        Console.WriteLine("4. Run ./scripts/verify-environment.sh for detailed checks");
-        Console.WriteLine();
-
-        Console.WriteLine("For more information, see README.md");
-        Console.WriteLine();
-
-        logger.Info("BTSimulator Demo application completed");
-        logger.Dispose();
-
-        return 0;
+        Console.WriteLine($"Logs are being written to: {_settings!.Logging.LogDirectory}");
+        Console.WriteLine("View them with: cat logs/btsimulator-*.log");
+        Console.WriteLine("Or tail -f logs/btsimulator-*.log for live updates");
     }
 }
