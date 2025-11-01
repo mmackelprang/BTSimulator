@@ -212,10 +212,15 @@ class Program
                     Console.WriteLine("✓ Connected to BlueZ via D-Bus");
                     Console.ResetColor();
 
-                    // Try to get default adapter
+                    // Select adapter
                     try
                     {
-                        var adapterPath = await manager.GetDefaultAdapterAsync();
+                        var adapterSelector = new AdapterSelector(manager, logger);
+                        var adapterPath = await adapterSelector.SelectAdapterAsync(
+                            settings.Bluetooth.AdapterName,
+                            promptIfMissing: true
+                        );
+
                         if (adapterPath == null)
                         {
                             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -225,7 +230,7 @@ class Program
                         }
                         else
                         {
-                            Console.WriteLine($"  Default Adapter: {adapterPath}");
+                            Console.WriteLine($"  Selected Adapter: {adapterPath}");
                             Console.WriteLine();
 
                             // Demonstrate adapter property access

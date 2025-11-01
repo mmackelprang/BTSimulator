@@ -11,6 +11,7 @@ Console.WriteLine();
 // Parse command line arguments
 var scanDuration = 10; // Default scan duration in seconds
 var outputFormat = "json"; // Default output format
+string? adapterName = null; // Optional adapter name
 
 if (args.Length > 0 && int.TryParse(args[0], out var duration))
 {
@@ -20,6 +21,11 @@ if (args.Length > 0 && int.TryParse(args[0], out var duration))
 if (args.Length > 1 && (args[1].ToLower() == "text" || args[1].ToLower() == "json"))
 {
     outputFormat = args[1].ToLower();
+}
+
+if (args.Length > 2)
+{
+    adapterName = args[2];
 }
 
 // Create logger (output to console only for errors)
@@ -38,8 +44,10 @@ try
         return 1;
     }
 
-    // Get default adapter
-    var adapterPath = await manager.GetDefaultAdapterAsync();
+    // Select adapter
+    var adapterSelector = new AdapterSelector(manager, logger);
+    var adapterPath = await adapterSelector.SelectAdapterAsync(adapterName, promptIfMissing: true);
+    
     if (adapterPath == null)
     {
         Console.WriteLine("Error: No Bluetooth adapter found.");

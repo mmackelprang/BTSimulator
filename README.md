@@ -275,6 +275,7 @@ The Demo application supports configuration via `appsettings.json`:
     "MinLevel": "Debug"
   },
   "Bluetooth": {
+    "AdapterName": "hci0",
     "DeviceName": "BT Simulator Demo",
     "DeviceAddress": null,
     "Services": [
@@ -302,6 +303,7 @@ The Demo application supports configuration via `appsettings.json`:
 - `MinLevel`: Minimum log level - Debug, Info, Warning, or Error (default: "Info")
 
 **Bluetooth Settings:**
+- `AdapterName`: Name of the Bluetooth adapter to use (e.g., "hci0", "hci1", or full path "/org/bluez/hci0"). Optional - if not specified or multiple adapters are present, you will be prompted to select one.
 - `DeviceName`: Name of the simulated Bluetooth device
 - `DeviceAddress`: Optional MAC address (format: XX:XX:XX:XX:XX:XX)
 - `Services`: Array of GATT services to advertise
@@ -316,6 +318,52 @@ The Demo application supports configuration via `appsettings.json`:
 - `Flags`: Array of flags (e.g., "read", "write", "notify", "indicate")
 - `InitialValue`: Hex string representing initial byte value (e.g., "55" for byte 0x55)
 - `Description`: Human-readable description
+
+### Bluetooth Adapter Selection
+
+If you have multiple Bluetooth adapters (e.g., built-in Bluetooth + USB dongle), you can specify which one to use:
+
+**Method 1: Configuration File (appsettings.json)**
+```json
+{
+  "Bluetooth": {
+    "AdapterName": "hci1"
+  }
+}
+```
+
+**Method 2: Interactive Selection**
+
+If `AdapterName` is not configured and multiple adapters are detected, you will be prompted:
+```
+Multiple Bluetooth adapters detected. Please select one:
+
+  [1] hci0 - AA:BB:CC:DD:EE:F0
+      Alias: Built-in Bluetooth, Powered: ON
+  [2] hci1 - AA:BB:CC:DD:EE:F1
+      Alias: USB Bluetooth Dongle, Powered: ON
+
+Enter selection (1-2) or press Enter for default [hci0]:
+```
+
+**Method 3: Command Line (Scanner Only)**
+```bash
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 json hci1
+```
+
+**Checking Available Adapters**
+
+To see available Bluetooth adapters on your system:
+```bash
+# Using bluetoothctl
+bluetoothctl list
+
+# Using hciconfig
+hciconfig -a
+
+# Using BTScanner (will list adapters if multiple exist)
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj
+```
 
 ### Logging
 

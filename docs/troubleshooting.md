@@ -9,7 +9,8 @@ Common issues and solutions for BTSimulator on Linux and WSL2.
 3. [D-Bus Issues](#d-bus-issues)
 4. [WSL2-Specific Issues](#wsl2-specific-issues)
 5. [Permission Issues](#permission-issues)
-6. [Build and Runtime Issues](#build-and-runtime-issues)
+6. [Adapter Selection Issues](#adapter-selection-issues)
+7. [Build and Runtime Issues](#build-and-runtime-issues)
 
 ---
 
@@ -399,6 +400,112 @@ Note: Some Bluetooth adapters have hard-coded MAC addresses that cannot be chang
 
 ---
 
+## Adapter Selection Issues
+
+### Issue: Wrong Adapter Selected
+
+**Symptoms**:
+- Application uses built-in Bluetooth instead of USB dongle
+- Unexpected adapter being used
+
+**Solutions**:
+
+1. **Check available adapters**:
+```bash
+bluetoothctl list
+# Or
+hciconfig -a
+```
+
+2. **Configure adapter in appsettings.json**:
+```json
+{
+  "Bluetooth": {
+    "AdapterName": "hci1"
+  }
+}
+```
+
+3. **Specify adapter on command line (Scanner)**:
+```bash
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 json hci1
+```
+
+4. **Use interactive selection**:
+- Remove `AdapterName` from configuration
+- Application will prompt for selection when multiple adapters exist
+
+### Issue: Configured Adapter Not Found
+
+**Symptoms**:
+```
+Warning: Configured adapter 'hci1' not found
+Using default adapter: hci0
+```
+
+**Solutions**:
+
+1. **Verify adapter exists**:
+```bash
+bluetoothctl list
+```
+
+2. **Check adapter name/path format**:
+   - Use short name: `"hci0"` or `"hci1"`
+   - Or full path: `"/org/bluez/hci0"`
+
+3. **Check adapter is powered**:
+```bash
+bluetoothctl show hci1
+# If powered off:
+bluetoothctl power on
+```
+
+4. **Update configuration** with correct adapter name
+
+### Issue: No Adapters Found
+
+**Symptoms**:
+```
+Error: No Bluetooth adapters found
+```
+
+**Solutions**:
+
+See [No Bluetooth Adapter Found](#issue-no-bluetooth-adapter-found) section above.
+
+### Issue: Can't List Multiple Adapters
+
+**Symptoms**:
+- Only one adapter shown even when multiple exist
+- Adapter selection not appearing
+
+**Solutions**:
+
+1. **Check BlueZ service**:
+```bash
+sudo systemctl status bluetooth
+```
+
+2. **Verify D-Bus permissions**:
+```bash
+# Should succeed without error
+dbus-send --system --print-reply --dest=org.bluez / org.freedesktop.DBus.ObjectManager.GetManagedObjects
+```
+
+3. **Check all adapters are up**:
+```bash
+sudo hciconfig -a
+sudo rfkill list bluetooth
+```
+
+4. **Restart BlueZ** to refresh adapter list:
+```bash
+sudo systemctl restart bluetooth
+```
+
+---
+
 ## Build and Runtime Issues
 
 ### Issue: Build Fails with Missing Assembly
@@ -606,8 +713,9 @@ dmesg | grep -i bluetooth > kernel.log
    - Classic profiles (A2DP, HID) are stretch goals
 
 3. **Multiple Adapters**:
-   - Primary focus on single adapter
-   - Multi-adapter support is basic
+   - Supports multiple adapters with selection
+   - Interactive or configuration-based selection available
+   - See [Adapter Selection](#adapter-selection-issues) below
 
 ### Platform Limitations
 
