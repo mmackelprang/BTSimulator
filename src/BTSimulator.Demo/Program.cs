@@ -341,6 +341,11 @@ class Program
 
     private static GattApplication CreateGattApplication(DeviceConfiguration config)
     {
+        if (_logger == null)
+        {
+            throw new InvalidOperationException("Logger must be initialized before creating GATT application");
+        }
+
         var application = new GattApplication();
         int serviceIndex = 0;
 
@@ -359,21 +364,22 @@ class Program
                     serviceIndex
                 );
 
-                characteristic.SetLogger(_logger!);
+                characteristic.SetLogger(_logger);
                 characteristic.ServicePath = service.ObjectPath;
 
                 // Wire up handlers
+                var logger = _logger; // Capture logger for lambda
                 characteristic.OnRead += (sender, args) =>
                 {
                     var ch = (GattCharacteristic)sender!;
-                    _logger!.Info($"[READ] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                    logger.Info($"[READ] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
                     Console.WriteLine($"[READ] {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
                 };
 
                 characteristic.OnWrite += (sender, args) =>
                 {
                     var ch = (GattCharacteristic)sender!;
-                    _logger!.Info($"[WRITE] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
+                    logger.Info($"[WRITE] Characteristic {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
                     Console.WriteLine($"[WRITE] {ch.UUID}: {BitConverter.ToString(args.Value).Replace("-", "")}");
                 };
 
@@ -425,7 +431,7 @@ class Program
             switch (choice)
             {
                 case "1":
-                    await SendCannedMessage();
+                    SendCannedMessage();
                     break;
                 case "2":
                     ListCharacteristics();
@@ -442,9 +448,11 @@ class Program
                     break;
             }
         }
+
+        await Task.CompletedTask;
     }
 
-    private static async Task SendCannedMessage()
+    private static void SendCannedMessage()
     {
         if (_settings == null || _settings.Bluetooth.CannedMessages.Count == 0)
         {
@@ -476,7 +484,11 @@ class Program
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine($"✓ Sent '{message.Name}': {message.Data}");
                     Console.ResetColor();
-                    _logger!.Info($"[NOTIFY] Sent canned message '{message.Name}' to {message.CharacteristicUuid}: {message.Data}");
+                    
+                    if (_logger != null)
+                    {
+                        _logger.Info($"[NOTIFY] Sent canned message '{message.Name}' to {message.CharacteristicUuid}: {message.Data}");
+                    }
                     
                     // In a real implementation, this would trigger a notification to connected clients
                     Console.WriteLine("  (Note: In a full implementation, this would notify connected BLE clients)");
@@ -486,7 +498,11 @@ class Program
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine($"✗ Failed to send message: {ex.Message}");
                     Console.ResetColor();
-                    _logger!.Error($"Failed to send canned message: {ex.Message}");
+                    
+                    if (_logger != null)
+                    {
+                        _logger.Error($"Failed to send canned message: {ex.Message}");
+                    }
                 }
             }
             else
@@ -500,8 +516,6 @@ class Program
         {
             Console.WriteLine("Invalid choice.");
         }
-
-        await Task.CompletedTask;
     }
 
     private static void ListCharacteristics()
