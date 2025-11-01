@@ -88,6 +88,9 @@ public class AdapterSelector
 
     /// <summary>
     /// Prompts the user to select an adapter from available options.
+    /// Note: This method uses direct Console I/O for interactive user selection.
+    /// It is intentionally synchronous and console-coupled as it's designed for
+    /// command-line application use cases where user interaction is required.
     /// </summary>
     private Task<string?> PromptForAdapterAsync(List<AdapterInfo> adapters)
     {

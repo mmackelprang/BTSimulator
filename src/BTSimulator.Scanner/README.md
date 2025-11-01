@@ -58,7 +58,7 @@ If you don't specify an adapter and multiple adapters are detected, you will be 
 ### Command Line Arguments
 
 ```
-dotnet run -- [duration] [format] [adapter]
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- [duration] [format] [adapter]
 
 Arguments:
   duration  Scan duration in seconds (default: 10)

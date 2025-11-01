@@ -181,8 +181,11 @@ public class BlueZManager : IDisposable
     /// </summary>
     private static string ExtractAdapterName(string adapterPath)
     {
+        if (string.IsNullOrEmpty(adapterPath))
+            return adapterPath;
+            
         var parts = adapterPath.Split('/');
-        return parts.Length > 0 ? parts[^1] : adapterPath;
+        return parts.Length > 0 && !string.IsNullOrEmpty(parts[^1]) ? parts[^1] : adapterPath;
     }
 
     /// <summary>
