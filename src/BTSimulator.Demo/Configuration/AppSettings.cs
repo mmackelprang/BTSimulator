@@ -38,6 +38,12 @@ public class LoggingSettings
 public class BluetoothSettings
 {
     /// <summary>
+    /// Name of the Bluetooth adapter to use (e.g., "hci0", "hci1", or "/org/bluez/hci0").
+    /// If not specified, the default adapter will be used (or user will be prompted if multiple exist).
+    /// </summary>
+    public string? AdapterName { get; set; }
+
+    /// <summary>
     /// Name of the simulated device.
     /// </summary>
     public string DeviceName { get; set; } = "BT Simulator";

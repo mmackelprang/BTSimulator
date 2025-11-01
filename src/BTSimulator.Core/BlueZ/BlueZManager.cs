@@ -113,6 +113,79 @@ public class BlueZManager : IDisposable
     }
 
     /// <summary>
+    /// Gets detailed information about all available Bluetooth adapters.
+    /// </summary>
+    /// <returns>List of adapter information.</returns>
+    public async Task<List<AdapterInfo>> GetAdapterInfosAsync()
+    {
+        if (_connection == null)
+            throw new InvalidOperationException("Not connected to D-Bus. Call ConnectAsync first.");
+
+        var adapterInfos = new List<AdapterInfo>();
+        var adapterPaths = await GetAdaptersAsync();
+
+        foreach (var adapterPath in adapterPaths)
+        {
+            try
+            {
+                var adapter = CreateAdapter(adapterPath);
+                var info = new AdapterInfo
+                {
+                    Path = adapterPath,
+                    Name = ExtractAdapterName(adapterPath)
+                };
+
+                try
+                {
+                    info.Address = await adapter.GetAddressAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"Could not get address for {adapterPath}: {ex.Message}");
+                    info.Address = "Unknown";
+                }
+
+                try
+                {
+                    info.Alias = await adapter.GetAliasAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"Could not get alias for {adapterPath}: {ex.Message}");
+                    info.Alias = info.Name;
+                }
+
+                try
+                {
+                    info.Powered = await adapter.GetPoweredAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"Could not get powered state for {adapterPath}: {ex.Message}");
+                    info.Powered = false;
+                }
+
+                adapterInfos.Add(info);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to get info for adapter {adapterPath}: {ex.Message}");
+            }
+        }
+
+        return adapterInfos;
+    }
+
+    /// <summary>
+    /// Extracts the adapter name (e.g., "hci0") from the full D-Bus path.
+    /// </summary>
+    private static string ExtractAdapterName(string adapterPath)
+    {
+        var parts = adapterPath.Split('/');
+        return parts.Length > 0 ? parts[^1] : adapterPath;
+    }
+
+    /// <summary>
     /// Creates a proxy to access a specific Bluetooth adapter.
     /// </summary>
     /// <param name="adapterPath">D-Bus object path of the adapter (e.g., "/org/bluez/hci0").</param>

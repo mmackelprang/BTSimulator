@@ -42,6 +42,30 @@ Scan and display human-readable output:
 dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 text
 ```
 
+### Specify Bluetooth Adapter
+
+If you have multiple Bluetooth adapters, you can specify which one to use:
+```bash
+# By adapter name
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 json hci0
+
+# By full path
+dotnet run --project src/BTSimulator.Scanner/BTSimulator.Scanner.csproj -- 10 json /org/bluez/hci1
+```
+
+If you don't specify an adapter and multiple adapters are detected, you will be prompted to select one.
+
+### Command Line Arguments
+
+```
+dotnet run -- [duration] [format] [adapter]
+
+Arguments:
+  duration  Scan duration in seconds (default: 10)
+  format    Output format: "json" or "text" (default: "json")
+  adapter   Adapter name like "hci0" or path like "/org/bluez/hci0" (optional)
+```
+
 ## Output Examples
 
 ### JSON Output
