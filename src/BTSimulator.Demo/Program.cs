@@ -292,6 +292,8 @@ class Program
                         Console.WriteLine("✓ Full D-Bus property access is implemented and working!");
                         Console.ResetColor();
                         Console.WriteLine();
+                        Console.WriteLine("Press any key to exit...");
+                        Console.ReadKey();
                         }
                     }
                     catch (Exception ex)
