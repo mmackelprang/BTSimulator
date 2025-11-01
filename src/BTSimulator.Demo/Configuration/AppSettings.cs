@@ -57,6 +57,11 @@ public class BluetoothSettings
     /// List of GATT services to advertise.
     /// </summary>
     public List<GattServiceSettings> Services { get; set; } = new List<GattServiceSettings>();
+
+    /// <summary>
+    /// List of canned messages that can be sent on demand.
+    /// </summary>
+    public List<CannedMessageSettings> CannedMessages { get; set; } = new List<CannedMessageSettings>();
 }
 
 /// <summary>
@@ -104,4 +109,25 @@ public class GattCharacteristicSettings
     /// Description of the characteristic.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Canned message configuration settings.
+/// </summary>
+public class CannedMessageSettings
+{
+    /// <summary>
+    /// Name of the canned message.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// UUID of the characteristic to send this message to.
+    /// </summary>
+    public string CharacteristicUuid { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Message data as a hex string (e.g., "48656C6C6F" for "Hello").
+    /// </summary>
+    public string Data { get; set; } = string.Empty;
 }
