@@ -141,11 +141,20 @@ The Demo application will:
 3. Configure the simulated device with GATT services
 4. Connect to BlueZ and select a Bluetooth adapter
 5. Register the GATT application and start advertising
-6. Present an interactive menu for:
+6. **Start connection monitoring** to detect when clients connect/disconnect
+7. **Send automatic connection message** when a client connects (if configured)
+8. Present an interactive menu for:
    - Sending canned messages to notify characteristics
    - Listing registered characteristics
    - Viewing log locations
    - Exiting the application
+
+**Connection Handling:**
+
+When a client (e.g., smartphone, BLE scanner) connects to the simulated device:
+- The connection is detected and logged
+- An automatic connection acknowledgment message is sent (if configured in `appsettings.json`)
+- All connection/disconnection events are logged with timestamps and device addresses
 
 **Interactive Menu:**
 ```
@@ -373,6 +382,25 @@ The Demo application supports configuration via `appsettings.json`:
 - `CharacteristicUuid`: UUID of the characteristic to send this message to (must be a notify characteristic)
 - `Data`: Message data as a hex string (e.g., "48656C6C6F" for "Hello")
 
+**Connection Message:**
+- `ConnectionMessage`: Optional automatic message sent when a client connects
+- `CharacteristicUuid`: UUID of the characteristic to send this message to (must be a notify or indicate characteristic)
+- `Data`: Message data as a hex string (e.g., "434F4E4E454354454421" for "CONNECTED!")
+- `Description`: Human-readable description of the message
+
+Example connection message configuration:
+```json
+{
+  "Bluetooth": {
+    "ConnectionMessage": {
+      "CharacteristicUuid": "0000ff14-0000-1000-8000-00805f9b34fb",
+      "Data": "434F4E4E454354454421",
+      "Description": "Connection acknowledgment message (CONNECTED!)"
+    }
+  }
+}
+```
+
 Example canned messages configuration:
 ```json
 {
@@ -449,12 +477,16 @@ The logger creates daily log files with automatic rotation:
 - **Rotation**: New file created each day
 - **Cleanup**: Only the 2 most recent log files are kept
 - **Debug logging**: All Bluetooth message send/receive operations are logged at debug level
+- **Connection logging**: All client connection and disconnection events are logged with device addresses and timestamps
 
 Example log output:
 ```
 [20251029181650.849][INFO][FileLogger.Info][BTSimulator Demo application started]
 [20251029181650.903][INFO][FileLogger.Info][Device configuration validated successfully]
 [20251029181650.905][DEBUG][GattCharacteristic.ReadValueAsync][Reading characteristic 2A19, value: 55]
+[20251102162345.123][INFO][ConnectionMonitor.HandleDeviceConnected][Device connected: AA:BB:CC:DD:EE:FF]
+[20251102162345.125][INFO][Program.SendConnectionMessage][Sent connection message: 434F4E4E454354454421]
+[20251102162400.456][INFO][ConnectionMonitor.HandleDeviceDisconnected][Device disconnected: AA:BB:CC:DD:EE:FF]
 ```
 
 ## Documentation
