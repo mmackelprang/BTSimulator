@@ -190,7 +190,7 @@ class Program
             return 1;
         }
 
-        // Step 5: Connect to BlueZ and Start Advertising
+        // Step 5: Connect to BlueZ
         Console.WriteLine("Step 5: Connecting to BlueZ...");
         Console.WriteLine("─────────────────────────────────────");
 

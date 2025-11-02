@@ -120,7 +120,8 @@ public class ConnectionMonitor : IDisposable
                 else
                 {
                     // Watch for property changes on this device to catch when it connects
-                    WatchDeviceProperties(objectPath);
+                    // Fire and forget - we handle exceptions internally
+                    _ = WatchDevicePropertiesAsync(objectPath);
                 }
             }
         }
@@ -130,12 +131,24 @@ public class ConnectionMonitor : IDisposable
         }
     }
 
-    private async void WatchDeviceProperties(ObjectPath devicePath)
+    private async Task WatchDevicePropertiesAsync(ObjectPath devicePath)
     {
         try
         {
             var device = _manager.GetConnection().CreateProxy<IDevice1>("org.bluez", devicePath);
             
+            // Get device address first
+            string deviceAddress;
+            try
+            {
+                deviceAddress = await device.GetAsync<string>("Address");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"Failed to get device address for {devicePath}", ex);
+                return;
+            }
+
             await device.WatchPropertiesAsync(changes =>
             {
                 try
@@ -148,20 +161,15 @@ public class ConnectionMonitor : IDisposable
                         {
                             bool isConnected = Convert.ToBoolean(change.Value);
                             
-                            // Get device address
-                            var addressTask = device.GetAsync<string>("Address");
-                            addressTask.Wait();
-                            string address = addressTask.Result;
-
-                            _logger.Debug($"Device {address} connection state changed: {isConnected}");
+                            _logger.Debug($"Device {deviceAddress} connection state changed: {isConnected}");
 
                             if (isConnected)
                             {
-                                HandleDeviceConnected(address, devicePath);
+                                HandleDeviceConnected(deviceAddress, devicePath);
                             }
                             else
                             {
-                                HandleDeviceDisconnected(address, devicePath);
+                                HandleDeviceDisconnected(deviceAddress, devicePath);
                             }
                             break;
                         }
