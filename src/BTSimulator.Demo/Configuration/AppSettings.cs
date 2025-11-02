@@ -62,6 +62,11 @@ public class BluetoothSettings
     /// List of canned messages that can be sent on demand.
     /// </summary>
     public List<CannedMessageSettings> CannedMessages { get; set; } = new List<CannedMessageSettings>();
+
+    /// <summary>
+    /// Message to send automatically when a client connects.
+    /// </summary>
+    public ConnectionMessageSettings? ConnectionMessage { get; set; }
 }
 
 /// <summary>
@@ -130,4 +135,27 @@ public class CannedMessageSettings
     /// Message data as a hex string (e.g., "48656C6C6F" for "Hello").
     /// </summary>
     public string Data { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Connection message configuration settings.
+/// Defines a message to be sent automatically when a client connects.
+/// </summary>
+public class ConnectionMessageSettings
+{
+    /// <summary>
+    /// UUID of the characteristic to send this message to.
+    /// Must be a notify or indicate characteristic.
+    /// </summary>
+    public string CharacteristicUuid { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Message data as a hex string (e.g., "48656C6C6F" for "Hello").
+    /// </summary>
+    public string Data { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional description of the message.
+    /// </summary>
+    public string Description { get; set; } = "Connection acknowledgment";
 }
