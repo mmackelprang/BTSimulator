@@ -224,6 +224,30 @@ public class BlueZManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the underlying D-Bus connection.
+    /// </summary>
+    /// <returns>The D-Bus connection instance.</returns>
+    public IConnection GetConnection()
+    {
+        if (_connection == null)
+            throw new InvalidOperationException("Not connected to D-Bus. Call ConnectAsync first.");
+        
+        return _connection;
+    }
+
+    /// <summary>
+    /// Gets the ObjectManager proxy for BlueZ.
+    /// </summary>
+    /// <returns>ObjectManager proxy for monitoring D-Bus objects.</returns>
+    public IObjectManager GetObjectManager()
+    {
+        if (_connection == null)
+            throw new InvalidOperationException("Not connected to D-Bus. Call ConnectAsync first.");
+        
+        return _connection.CreateProxy<IObjectManager>(BlueZConstants.Service, "/");
+    }
+
     public void Dispose()
     {
         if (!_disposed)

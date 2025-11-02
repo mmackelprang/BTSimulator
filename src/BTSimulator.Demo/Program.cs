@@ -24,6 +24,8 @@ class Program
     private static GattApplication? _application;
     private static Dictionary<string, GattCharacteristic> _characteristicsByUuid = new();
     private static bool _isRunning = false;
+    private static ConnectionMonitor? _connectionMonitor;
+    private static BlueZManager? _manager;
 
     static async Task<int> Main(string[] args)
     {
@@ -218,8 +220,8 @@ class Program
 
         try
         {
-            var manager = new BlueZManager(_logger);
-            var connected = await manager.ConnectAsync();
+            _manager = new BlueZManager(_logger);
+            var connected = await _manager.ConnectAsync();
 
             if (!connected)
             {
@@ -235,7 +237,7 @@ class Program
             Console.ResetColor();
 
             // Select adapter
-            var adapterSelector = new AdapterSelector(manager, _logger);
+            var adapterSelector = new AdapterSelector(_manager, _logger);
             var adapterPath = await adapterSelector.SelectAdapterAsync(
                 _settings.Bluetooth.AdapterName,
                 promptIfMissing: true
@@ -253,7 +255,7 @@ class Program
             Console.WriteLine($"  Selected Adapter: {adapterPath}");
             Console.WriteLine();
 
-            var adapter = manager.CreateAdapter(adapterPath);
+            var adapter = _manager.CreateAdapter(adapterPath);
 
             // Display adapter properties
             Console.WriteLine("  Adapter Properties:");
@@ -311,6 +313,32 @@ class Program
             _logger.Info("Advertisement prepared");
             Console.WriteLine();
 
+            // Step 8: Start Connection Monitoring
+            Console.WriteLine("Step 8: Starting Connection Monitoring...");
+            Console.WriteLine("─────────────────────────────────────");
+            
+            _connectionMonitor = new ConnectionMonitor(_manager, _logger);
+            _connectionMonitor.DeviceConnected += OnDeviceConnected;
+            _connectionMonitor.DeviceDisconnected += OnDeviceDisconnected;
+            
+            try
+            {
+                await _connectionMonitor.StartMonitoringAsync();
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("✓ Connection monitoring started");
+                Console.ResetColor();
+                _logger.Info("Connection monitoring started successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"⚠ Connection monitoring failed to start: {ex.Message}");
+                Console.WriteLine("  Device will still advertise, but connection events won't be tracked");
+                Console.ResetColor();
+                _logger.Warning($"Connection monitoring failed to start: {ex.Message}");
+            }
+            Console.WriteLine();
+
             _isRunning = true;
 
             // Interactive Menu
@@ -333,6 +361,8 @@ class Program
         }
         finally
         {
+            _connectionMonitor?.Dispose();
+            _manager?.Dispose();
             _logger?.Dispose();
         }
 
@@ -554,5 +584,96 @@ class Program
         Console.WriteLine($"Logs are being written to: {_settings!.Logging.LogDirectory}");
         Console.WriteLine("View them with: cat logs/btsimulator-*.log");
         Console.WriteLine("Or tail -f logs/btsimulator-*.log for live updates");
+    }
+
+    private static void OnDeviceConnected(object? sender, DeviceConnectionEventArgs e)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine();
+        Console.WriteLine("╔════════════════════════════════════════╗");
+        Console.WriteLine("║     DEVICE CONNECTED                   ║");
+        Console.WriteLine("╚════════════════════════════════════════╝");
+        Console.WriteLine($"Device Address: {e.DeviceAddress}");
+        Console.WriteLine($"Timestamp: {e.Timestamp:yyyy-MM-dd HH:mm:ss}");
+        Console.ResetColor();
+        
+        if (_logger != null)
+        {
+            _logger.Info($"[CONNECTION] Device connected: {e.DeviceAddress} at {e.Timestamp}");
+        }
+
+        // Send connection message if configured
+        if (_settings?.Bluetooth.ConnectionMessage != null)
+        {
+            SendConnectionMessage();
+        }
+    }
+
+    private static void OnDeviceDisconnected(object? sender, DeviceConnectionEventArgs e)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine();
+        Console.WriteLine("╔════════════════════════════════════════╗");
+        Console.WriteLine("║     DEVICE DISCONNECTED                ║");
+        Console.WriteLine("╚════════════════════════════════════════╝");
+        Console.WriteLine($"Device Address: {e.DeviceAddress}");
+        Console.WriteLine($"Timestamp: {e.Timestamp:yyyy-MM-dd HH:mm:ss}");
+        Console.ResetColor();
+        
+        if (_logger != null)
+        {
+            _logger.Info($"[DISCONNECTION] Device disconnected: {e.DeviceAddress} at {e.Timestamp}");
+        }
+    }
+
+    private static void SendConnectionMessage()
+    {
+        if (_settings?.Bluetooth.ConnectionMessage == null)
+        {
+            return;
+        }
+
+        var connMsg = _settings.Bluetooth.ConnectionMessage;
+        
+        if (_characteristicsByUuid.TryGetValue(connMsg.CharacteristicUuid, out var characteristic))
+        {
+            try
+            {
+                var data = Convert.FromHexString(connMsg.Data);
+                characteristic.Value = data;
+                
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"✓ Sent connection message: {connMsg.Data}");
+                Console.WriteLine($"  Description: {connMsg.Description}");
+                Console.ResetColor();
+                
+                if (_logger != null)
+                {
+                    _logger.Info($"[CONNECTION_MSG] Sent: {connMsg.Data} ({connMsg.Description})");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"✗ Failed to send connection message: {ex.Message}");
+                Console.ResetColor();
+                
+                if (_logger != null)
+                {
+                    _logger.Error($"Failed to send connection message: {ex.Message}");
+                }
+            }
+        }
+        else
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"⚠ Connection message characteristic {connMsg.CharacteristicUuid} not found");
+            Console.ResetColor();
+            
+            if (_logger != null)
+            {
+                _logger.Warning($"Connection message characteristic {connMsg.CharacteristicUuid} not found");
+            }
+        }
     }
 }
